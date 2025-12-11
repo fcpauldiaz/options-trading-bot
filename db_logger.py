@@ -8,7 +8,6 @@ logger = logging.getLogger(__name__)
 class DBLogger:
     def __init__(self, db_client=None):
         self.db_client = db_client or DBClient()
-        self.client = self.db_client.get_client()
         self._ensure_tables_exist()
     
     def _ensure_tables_exist(self):
@@ -32,7 +31,7 @@ class DBLogger:
             )
             """
             
-            self.client.execute(create_trades_table)
+            self.db_client.execute_sync(create_trades_table)
             logger.info("Trades table initialized")
         except Exception as e:
             logger.error(f"Error creating trades table: {e}")
@@ -53,7 +52,7 @@ class DBLogger:
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """
             
-            self.client.execute(
+            self.db_client.execute_sync(
                 insert_query,
                 (
                     timestamp,

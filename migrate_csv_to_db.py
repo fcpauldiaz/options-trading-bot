@@ -20,7 +20,6 @@ def migrate_csv_to_turso(csv_file="trades.csv"):
     try:
         db_client = DBClient()
         db_logger = DBLogger(db_client)
-        client = db_client.get_client()
         
         logger.info(f"Starting migration from {csv_file} to Turso database")
         
@@ -48,7 +47,7 @@ def migrate_csv_to_turso(csv_file="trades.csv"):
                     if "order_type" in row and row["order_type"]:
                         order_type = row["order_type"]
                     
-                    client.execute(
+                    db_client.execute_sync(
                         insert_query,
                         (
                             row.get("timestamp", ""),

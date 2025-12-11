@@ -6,7 +6,6 @@ logger = logging.getLogger(__name__)
 class PositionTracker:
     def __init__(self, db_client=None):
         self.db_client = db_client or DBClient()
-        self.client = self.db_client.get_client()
         self.positions = {}
         self._ensure_tables_exist()
         self.load_positions_from_db()
@@ -28,7 +27,7 @@ class PositionTracker:
             )
             """
             
-            self.client.execute(create_positions_table)
+            self.db_client.execute_sync(create_positions_table)
             logger.info("Positions table initialized")
         except Exception as e:
             logger.error(f"Error creating positions table: {e}")
@@ -42,7 +41,7 @@ class PositionTracker:
             WHERE quantity > 0
             """
             
-            result = self.client.execute(select_query)
+            result = self.db_client.execute_sync(select_query)
             
             for row in result.rows:
                 ticker = row[0]
@@ -135,7 +134,7 @@ class PositionTracker:
                 last_updated = ?
             """
             
-            self.client.execute(
+            self.db_client.execute_sync(
                 upsert_query,
                 (
                     ticker.upper(), strike, option_type.upper(),
@@ -149,7 +148,7 @@ class PositionTracker:
             WHERE ticker = ? AND strike = ? AND option_type = ?
             """
             
-            self.client.execute(
+            self.db_client.execute_sync(
                 delete_query,
                 (ticker.upper(), strike, option_type.upper())
             )
