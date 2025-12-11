@@ -8,4 +8,12 @@ trades.csv
 venv/
 *.csv
 processed_messages.txt
+node_modules/
+frontend/build/
+frontend/dist/
+frontend/.vite/
+frontend/.env.local
+frontend/.env.development.local
+frontend/.env.test.local
+frontend/.env.production.local
 

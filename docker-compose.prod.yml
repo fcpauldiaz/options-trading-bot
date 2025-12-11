@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: trading-bot-backend
+    ports:
+      - "5000:5000"
+    environment:
+      - DISCORD_TOKEN=${DISCORD_TOKEN}
+      - TRADING_MODE=${TRADING_MODE:-paper}
+      - TRADIER_PAPER_API_KEY=${TRADIER_PAPER_API_KEY}
+      - TRADIER_LIVE_API_KEY=${TRADIER_LIVE_API_KEY}
+      - TRADIER_PAPER_ACCOUNT_ID=${TRADIER_PAPER_ACCOUNT_ID}
+      - TRADIER_LIVE_ACCOUNT_ID=${TRADIER_LIVE_ACCOUNT_ID}
+      - DISCORD_CHANNEL_ID=${DISCORD_CHANNEL_ID}
+      - TURSO_DATABASE_URL=${TURSO_DATABASE_URL}
+      - TURSO_AUTH_TOKEN=${TURSO_AUTH_TOKEN}
+      - FLASK_DEBUG=False
+      - PORT=5000
+      - HOST=0.0.0.0
+    volumes:
+      - ./logs:/app/logs
+    restart: unless-stopped
+    networks:
+      - trading-bot-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/api/stats"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: trading-bot-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - trading-bot-network
+
+networks:
+  trading-bot-network:
+    driver: bridge
+

@@ -1,77 +1,157 @@
-import csv
-import os
 import logging
+from db_client import DBClient
 
 logger = logging.getLogger(__name__)
 
 class PositionTracker:
-    def __init__(self, csv_file="trades.csv"):
-        self.csv_file = csv_file
+    def __init__(self, db_client=None):
+        self.db_client = db_client or DBClient()
+        self.client = self.db_client.get_client()
         self.positions = {}
-        self.load_positions_from_csv()
-
+        self._ensure_tables_exist()
+        self.load_positions_from_db()
+    
     def _get_position_key(self, ticker, strike, option_type):
         return (ticker.upper(), float(strike), option_type.upper())
-
-    def load_positions_from_csv(self):
-        if not os.path.exists(self.csv_file):
-            logger.info(f"CSV file {self.csv_file} does not exist. Starting with no positions.")
-            return
-
+    
+    def _ensure_tables_exist(self):
         try:
-            with open(self.csv_file, 'r', newline='') as f:
-                reader = csv.DictReader(f)
-                for row in reader:
-                    try:
-                        ticker = row.get("ticker", "").strip()
-                        strike = float(row.get("strike", 0))
-                        option_type = row.get("option_type", "").strip().upper()
-                        action = row.get("action", "").strip().upper()
-                        contracts = int(row.get("contracts", 0))
-
-                        if not ticker or not option_type or contracts <= 0:
-                            continue
-
-                        key = self._get_position_key(ticker, strike, option_type)
-
-                        if action == "BOUGHT":
-                            self.positions[key] = self.positions.get(key, 0) + contracts
-                        elif action == "SOLD":
-                            self.positions[key] = self.positions.get(key, 0) - contracts
-
-                    except (ValueError, KeyError) as e:
-                        logger.warning(f"Skipping invalid row in CSV: {e}")
-                        continue
-
-            total_positions = sum(1 for qty in self.positions.values() if qty > 0)
-            logger.info(f"Loaded {total_positions} open positions from {self.csv_file}")
+            create_positions_table = """
+            CREATE TABLE IF NOT EXISTS positions (
+                ticker TEXT NOT NULL,
+                strike REAL NOT NULL,
+                option_type TEXT NOT NULL,
+                quantity INTEGER NOT NULL,
+                avg_entry_price REAL,
+                last_updated TEXT NOT NULL,
+                PRIMARY KEY (ticker, strike, option_type)
+            )
+            """
+            
+            self.client.execute(create_positions_table)
+            logger.info("Positions table initialized")
         except Exception as e:
-            logger.error(f"Error loading positions from CSV: {e}")
-
+            logger.error(f"Error creating positions table: {e}")
+            raise
+    
+    def load_positions_from_db(self):
+        try:
+            select_query = """
+            SELECT ticker, strike, option_type, quantity, avg_entry_price
+            FROM positions
+            WHERE quantity > 0
+            """
+            
+            result = self.client.execute(select_query)
+            
+            for row in result.rows:
+                ticker = row[0]
+                strike = float(row[1])
+                option_type = row[2]
+                quantity = int(row[3])
+                avg_entry_price = float(row[4]) if row[4] is not None else None
+                
+                key = self._get_position_key(ticker, strike, option_type)
+                self.positions[key] = {
+                    "quantity": quantity,
+                    "avg_entry_price": avg_entry_price
+                }
+            
+            logger.info(f"Loaded {len(self.positions)} open positions from database")
+        except Exception as e:
+            logger.error(f"Error loading positions from database: {e}")
+    
     def get_position(self, ticker, strike, option_type):
         key = self._get_position_key(ticker, strike, option_type)
-        return self.positions.get(key, 0)
-
+        pos = self.positions.get(key)
+        return pos["quantity"] if pos else 0
+    
+    def get_avg_entry_price(self, ticker, strike, option_type):
+        key = self._get_position_key(ticker, strike, option_type)
+        pos = self.positions.get(key)
+        return pos["avg_entry_price"] if pos and pos["avg_entry_price"] else None
+    
     def can_sell(self, ticker, strike, option_type, quantity):
         available = self.get_position(ticker, strike, option_type)
         return available >= quantity
-
+    
     def get_available_quantity(self, ticker, strike, option_type, requested):
         available = self.get_position(ticker, strike, option_type)
         return min(requested, available) if available > 0 else 0
-
-    def update_position(self, ticker, strike, option_type, action, quantity):
+    
+    def _calculate_avg_entry_price(self, ticker, strike, option_type, new_price, new_quantity):
         key = self._get_position_key(ticker, strike, option_type)
-        current = self.positions.get(key, 0)
-
+        current_pos = self.positions.get(key)
+        
+        if not current_pos or current_pos["quantity"] <= 0:
+            return new_price
+        
+        current_quantity = current_pos["quantity"]
+        current_avg = current_pos["avg_entry_price"] or 0
+        
+        total_cost = (current_avg * current_quantity) + (new_price * new_quantity)
+        total_quantity = current_quantity + new_quantity
+        
+        return total_cost / total_quantity if total_quantity > 0 else new_price
+    
+    def update_position(self, ticker, strike, option_type, action, quantity, price=None):
+        from datetime import datetime
+        
+        key = self._get_position_key(ticker, strike, option_type)
+        current_pos = self.positions.get(key, {"quantity": 0, "avg_entry_price": None})
+        current_quantity = current_pos["quantity"]
+        current_avg_price = current_pos["avg_entry_price"]
+        
         action_upper = action.upper()
+        new_quantity = current_quantity
+        new_avg_price = current_avg_price
+        
         if action_upper == "BOUGHT":
-            self.positions[key] = current + quantity
+            if price is not None:
+                new_avg_price = self._calculate_avg_entry_price(ticker, strike, option_type, price, quantity)
+            new_quantity = current_quantity + quantity
         elif action_upper == "SOLD":
-            self.positions[key] = current - quantity
+            new_quantity = current_quantity - quantity
+            if new_quantity <= 0:
+                new_avg_price = None
         else:
             logger.warning(f"Unknown action for position update: {action}")
-
-        new_quantity = self.positions[key]
-        logger.info(f"Position updated: {ticker} {strike}{option_type} - {action} {quantity} contracts. New position: {new_quantity}")
-
+            return
+        
+        self.positions[key] = {
+            "quantity": new_quantity,
+            "avg_entry_price": new_avg_price
+        }
+        
+        last_updated = datetime.now().isoformat()
+        
+        if new_quantity > 0:
+            upsert_query = """
+            INSERT INTO positions (ticker, strike, option_type, quantity, avg_entry_price, last_updated)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(ticker, strike, option_type) DO UPDATE SET
+                quantity = ?,
+                avg_entry_price = ?,
+                last_updated = ?
+            """
+            
+            self.client.execute(
+                upsert_query,
+                (
+                    ticker.upper(), strike, option_type.upper(),
+                    new_quantity, new_avg_price, last_updated,
+                    new_quantity, new_avg_price, last_updated
+                )
+            )
+        else:
+            delete_query = """
+            DELETE FROM positions
+            WHERE ticker = ? AND strike = ? AND option_type = ?
+            """
+            
+            self.client.execute(
+                delete_query,
+                (ticker.upper(), strike, option_type.upper())
+            )
+        
+        logger.info(f"Position updated: {ticker} {strike}{option_type} - {action} {quantity} contracts. New position: {new_quantity}, Avg entry: ${new_avg_price:.2f}" if new_avg_price else f"Position updated: {ticker} {strike}{option_type} - {action} {quantity} contracts. New position: {new_quantity}")

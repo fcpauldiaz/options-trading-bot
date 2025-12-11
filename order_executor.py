@@ -77,7 +77,8 @@ class OrderExecutor:
                     "order_id": order_id,
                     "status": status,
                     "response": response,
-                    "actual_quantity": actual_quantity
+                    "actual_quantity": actual_quantity,
+                    "order_type": order_type
                 }
                 
                 if actual_quantity != requested_quantity:

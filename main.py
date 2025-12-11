@@ -10,8 +10,9 @@ from message_parser import MessageParser
 from tradier_client import TradierClient
 from option_resolver import OptionResolver
 from order_executor import OrderExecutor
-from csv_logger import CSVLogger
+from db_logger import DBLogger
 from position_tracker import PositionTracker
+from db_client import DBClient
 
 logging.basicConfig(
     level=logging.INFO,
@@ -35,8 +36,9 @@ class TradingBot:
         self.scraper = DiscordScraper()
         self.parser = MessageParser()
         self.tradier_client = TradierClient()
-        self.csv_logger = CSVLogger()
-        self.position_tracker = PositionTracker()
+        self.db_client = DBClient()
+        self.db_logger = DBLogger(self.db_client)
+        self.position_tracker = PositionTracker(self.db_client)
         self.option_resolver = OptionResolver(self.tradier_client)
         self.order_executor = OrderExecutor(self.tradier_client, self.position_tracker)
         
@@ -153,14 +155,16 @@ class TradingBot:
                 if actual_quantity != trade_data["contracts"]:
                     trade_data_for_log["contracts"] = actual_quantity
                 
-                self.csv_logger.log_trade(message.id, trade_data_for_log, option_symbol, order_result)
+                self.db_logger.log_trade(message.id, trade_data_for_log, option_symbol, order_result)
                 
+                price = trade_data_for_log.get("price")
                 self.position_tracker.update_position(
                     trade_data["ticker"],
                     trade_data["strike"],
                     trade_data["option_type"],
                     trade_data["action"],
-                    actual_quantity
+                    actual_quantity,
+                    price
                 )
             else:
                 logger.error(f"Order failed: {order_result.get('error', 'Unknown error')}")
