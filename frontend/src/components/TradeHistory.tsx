@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { format } from 'date-fns';
 import { tradesApi, Trade } from '../services/api';
 import './TradeHistory.css';

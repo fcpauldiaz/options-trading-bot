@@ -1,10 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { positionsApi, plApi } from '../services/api';
 import './OpenPositions.css';
 
 const OpenPositions: React.FC = () => {
   const [positions, setPositions] = useState<any[]>([]);
-  const [unrealizedPL, setUnrealizedPL] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -32,7 +31,6 @@ const OpenPositions: React.FC = () => {
         });
 
         setPositions(positionsWithPL);
-        setUnrealizedPL(unrealizedData.unrealized_pl || []);
       } catch (error) {
         console.error('Error fetching positions:', error);
       } finally {

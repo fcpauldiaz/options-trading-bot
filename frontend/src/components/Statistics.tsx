@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { statsApi, plApi } from '../services/api';
 import './Statistics.css';
 

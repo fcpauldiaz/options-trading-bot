@@ -1,4 +1,4 @@
-FROM node:18-alpine as frontend-builder
+FROM node:24-alpine as frontend-builder
 
 WORKDIR /app
 
@@ -29,6 +29,8 @@ RUN mkdir -p logs /var/log/supervisor
 
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 COPY nginx-app.conf /etc/nginx/sites-available/default
+RUN ln -sf /etc/nginx/sites-available/default /etc/nginx/sites-enabled/default
+RUN rm -f /etc/nginx/conf.d/default.conf
 
 EXPOSE 80
 

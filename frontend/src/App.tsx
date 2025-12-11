@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import './App.css';
 import PLSummary from './components/PLSummary';
 import TradeHistory from './components/TradeHistory';
