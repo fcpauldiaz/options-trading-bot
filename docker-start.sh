@@ -15,8 +15,8 @@ docker-compose up -d
 
 echo ""
 echo "Services started!"
-echo "Frontend: http://localhost:3000"
-echo "Backend API: http://localhost:5000"
+echo "Frontend: http://localhost:3005"
+echo "Backend API: http://localhost:4000"
 echo ""
 echo "To view logs: docker-compose logs -f"
 echo "To stop: docker-compose down"

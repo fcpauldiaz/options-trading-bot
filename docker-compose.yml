@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   backend:
     build:
@@ -7,7 +5,7 @@ services:
       dockerfile: Dockerfile
     container_name: trading-bot-backend
     ports:
-      - "5000:5000"
+      - "4000:80"
     environment:
       - DISCORD_TOKEN=${DISCORD_TOKEN}
       - TRADING_MODE=${TRADING_MODE:-paper}
@@ -30,7 +28,7 @@ services:
       dockerfile: Dockerfile
     container_name: trading-bot-frontend
     ports:
-      - "3000:80"
+      - "3005:80"
     depends_on:
       - backend
     environment:

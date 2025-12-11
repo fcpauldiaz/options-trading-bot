@@ -1,12 +1,12 @@
 import os
 import logging
-from libsql_client import create_client
+import libsql
 
 logger = logging.getLogger(__name__)
 
 class DBClient:
     _instance = None
-    _client = None
+    _conn = None
     
     def __new__(cls):
         if cls._instance is None:
@@ -14,36 +14,52 @@ class DBClient:
         return cls._instance
     
     def __init__(self):
-        if self._client is None:
-            self._initialize_client()
+        pass
     
-    def _initialize_client(self):
-        database_url = os.getenv("TURSO_DATABASE_URL")
-        auth_token = os.getenv("TURSO_AUTH_TOKEN")
+    def _get_connection(self):
+        if self._conn is None:
+            database_url = os.getenv("TURSO_DATABASE_URL")
+            auth_token = os.getenv("TURSO_AUTH_TOKEN")
+            
+            if not database_url:
+                raise ValueError("TURSO_DATABASE_URL environment variable is not set")
+            if not auth_token:
+                raise ValueError("TURSO_AUTH_TOKEN environment variable is not set")
+            
+            try:
+                self._conn = libsql.connect(database_url, auth_token=auth_token)
+                logger.info("Successfully connected to Turso database")
+            except Exception as e:
+                logger.error(f"Failed to connect to Turso database: {e}")
+                raise
         
-        if not database_url:
-            raise ValueError("TURSO_DATABASE_URL environment variable is not set")
-        if not auth_token:
-            raise ValueError("TURSO_AUTH_TOKEN environment variable is not set")
+        return self._conn
+    
+    def execute_sync(self, query, params=None):
+        conn = self._get_connection()
+        cursor = conn.cursor()
         
         try:
-            self._client = create_client(
-                url=database_url,
-                auth_token=auth_token
-            )
-            logger.info("Successfully connected to Turso database")
+            if params:
+                cursor.execute(query, params)
+            else:
+                cursor.execute(query)
+            
+            conn.commit()
+            
+            class Result:
+                def __init__(self, cursor):
+                    self.cursor = cursor
+                    self.rows = cursor.fetchall()
+            
+            return Result(cursor)
         except Exception as e:
-            logger.error(f"Failed to connect to Turso database: {e}")
+            logger.error(f"Database query error: {e}")
             raise
     
-    def get_client(self):
-        if self._client is None:
-            self._initialize_client()
-        return self._client
-    
     def close(self):
-        if self._client:
-            self._client.close()
-            self._client = None
+        if self._conn:
+            self._conn.close()
+            self._conn = None
             logger.info("Closed Turso database connection")
 

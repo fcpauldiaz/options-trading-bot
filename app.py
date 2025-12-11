@@ -16,6 +16,52 @@ db_client = DBClient()
 tradier_client = TradierClient()
 option_resolver = OptionResolver(tradier_client)
 
+def run_migrations():
+    try:
+        create_trades_table = """
+        CREATE TABLE IF NOT EXISTS trades (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp TEXT NOT NULL,
+            message_id TEXT NOT NULL,
+            ticker TEXT NOT NULL,
+            strike REAL NOT NULL,
+            option_type TEXT NOT NULL,
+            action TEXT NOT NULL,
+            contracts INTEGER NOT NULL,
+            price REAL,
+            option_symbol TEXT NOT NULL,
+            order_id TEXT,
+            status TEXT,
+            account_id TEXT,
+            order_type TEXT
+        )
+        """
+        
+        create_positions_table = """
+        CREATE TABLE IF NOT EXISTS positions (
+            ticker TEXT NOT NULL,
+            strike REAL NOT NULL,
+            option_type TEXT NOT NULL,
+            quantity INTEGER NOT NULL,
+            avg_entry_price REAL,
+            last_updated TEXT NOT NULL,
+            PRIMARY KEY (ticker, strike, option_type)
+        )
+        """
+        
+        db_client.execute_sync(create_trades_table)
+        logger.info("Trades table created/verified")
+        
+        db_client.execute_sync(create_positions_table)
+        logger.info("Positions table created/verified")
+        
+        logger.info("Database migrations completed successfully")
+    except Exception as e:
+        logger.error(f"Error running migrations: {e}", exc_info=True)
+        raise
+
+run_migrations()
+
 def row_to_dict(row, columns):
     if hasattr(row, '__iter__') and not isinstance(row, (str, bytes)):
         return {col: row[i] if i < len(row) else None for i, col in enumerate(columns)}
@@ -24,8 +70,6 @@ def row_to_dict(row, columns):
 @app.route('/api/trades', methods=['GET'])
 def get_trades():
     try:
-        client = db_client.get_client()
-        
         ticker = request.args.get('ticker')
         action = request.args.get('action')
         start_date = request.args.get('start_date')
@@ -55,7 +99,7 @@ def get_trades():
         query += " ORDER BY timestamp DESC LIMIT ? OFFSET ?"
         params.extend([limit, offset])
         
-        result = client.execute(query, params)
+        result = db_client.execute_sync(query, params)
         
         columns = ['id', 'timestamp', 'message_id', 'ticker', 'strike', 'option_type',
                    'action', 'contracts', 'price', 'option_symbol', 'order_id',
@@ -82,7 +126,7 @@ def get_trades():
             count_query += " AND timestamp <= ?"
             count_params.append(end_date)
         
-        count_result = client.execute(count_query, count_params)
+        count_result = db_client.execute_sync(count_query, count_params)
         total = count_result.rows[0][0] if count_result.rows else 0
         
         return jsonify({
@@ -98,8 +142,7 @@ def get_trades():
 @app.route('/api/trades/<int:trade_id>', methods=['GET'])
 def get_trade(trade_id):
     try:
-        client = db_client.get_client()
-        result = client.execute(
+        result = db_client.execute_sync(
             "SELECT * FROM trades WHERE id = ?",
             [trade_id]
         )
@@ -120,8 +163,7 @@ def get_trade(trade_id):
 @app.route('/api/positions', methods=['GET'])
 def get_positions():
     try:
-        client = db_client.get_client()
-        result = client.execute(
+        result = db_client.execute_sync(
             "SELECT ticker, strike, option_type, quantity, avg_entry_price, last_updated FROM positions WHERE quantity > 0"
         )
         
@@ -144,8 +186,7 @@ def get_positions():
 @app.route('/api/positions/<ticker>/<float:strike>/<option_type>', methods=['GET'])
 def get_position(ticker, strike, option_type):
     try:
-        client = db_client.get_client()
-        result = client.execute(
+        result = db_client.execute_sync(
             "SELECT ticker, strike, option_type, quantity, avg_entry_price, last_updated FROM positions WHERE ticker = ? AND strike = ? AND option_type = ?",
             [ticker.upper(), strike, option_type.upper()]
         )
@@ -169,18 +210,16 @@ def get_position(ticker, strike, option_type):
 @app.route('/api/stats', methods=['GET'])
 def get_stats():
     try:
-        client = db_client.get_client()
-        
-        total_trades_result = client.execute("SELECT COUNT(*) FROM trades")
+        total_trades_result = db_client.execute_sync("SELECT COUNT(*) FROM trades")
         total_trades = total_trades_result.rows[0][0] if total_trades_result.rows else 0
         
-        bought_trades_result = client.execute("SELECT COUNT(*) FROM trades WHERE action = 'BOUGHT'")
+        bought_trades_result = db_client.execute_sync("SELECT COUNT(*) FROM trades WHERE action = 'BOUGHT'")
         bought_trades = bought_trades_result.rows[0][0] if bought_trades_result.rows else 0
         
-        sold_trades_result = client.execute("SELECT COUNT(*) FROM trades WHERE action = 'SOLD'")
+        sold_trades_result = db_client.execute_sync("SELECT COUNT(*) FROM trades WHERE action = 'SOLD'")
         sold_trades = sold_trades_result.rows[0][0] if sold_trades_result.rows else 0
         
-        realized_pl_result = client.execute("""
+        realized_pl_result = db_client.execute_sync("""
             SELECT SUM((s.price - b.price) * s.contracts * 100) as realized_pl
             FROM trades s
             JOIN trades b ON s.ticker = b.ticker 
@@ -207,9 +246,7 @@ def get_stats():
 @app.route('/api/pl/history', methods=['GET'])
 def get_pl_history():
     try:
-        client = db_client.get_client()
-        
-        result = client.execute("""
+        result = db_client.execute_sync("""
             SELECT 
                 DATE(timestamp) as date,
                 SUM(CASE WHEN action = 'BOUGHT' THEN -price * contracts * 100 ELSE 0 END) +
@@ -241,9 +278,7 @@ def get_pl_history():
 @app.route('/api/pl/realized', methods=['GET'])
 def get_realized_pl():
     try:
-        client = db_client.get_client()
-        
-        result = client.execute("""
+        result = db_client.execute_sync("""
             SELECT 
                 s.ticker,
                 s.strike,
@@ -283,9 +318,7 @@ def get_realized_pl():
 @app.route('/api/pl/unrealized', methods=['GET'])
 def get_unrealized_pl():
     try:
-        client = db_client.get_client()
-        
-        positions_result = client.execute(
+        positions_result = db_client.execute_sync(
             "SELECT ticker, strike, option_type, quantity, avg_entry_price FROM positions WHERE quantity > 0"
         )
         
@@ -335,7 +368,7 @@ def get_unrealized_pl():
 
 if __name__ == '__main__':
     import os
-    port = int(os.environ.get('PORT', 5000))
+    port = int(os.environ.get('PORT', 4000))
     host = os.environ.get('HOST', '0.0.0.0')
     app.run(host=host, port=port, debug=os.environ.get('FLASK_DEBUG', 'False').lower() == 'true')
 

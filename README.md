@@ -40,7 +40,7 @@ python app.py
 cd frontend && npm run dev
 ```
 
-The frontend will be available at http://localhost:3000 with hot module replacement.
+The frontend will be available at http://localhost:3005 with hot module replacement.
 
 ### Docker Deployment
 
@@ -59,8 +59,8 @@ Or use the convenience script:
 ```
 
 3. Access the application:
-   - **Frontend Dashboard**: http://localhost:3000 (includes both UI and API proxy)
-   - **Backend API directly**: http://localhost:5000/api
+   - **Frontend Dashboard**: http://localhost:3005 (includes both UI and API proxy)
+   - **Backend API directly**: http://localhost:4000/api
 
 4. View logs:
 ```bash
