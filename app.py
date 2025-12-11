@@ -251,8 +251,8 @@ def get_pl_history():
         result = db_client.execute_sync("""
             SELECT 
                 DATE(timestamp) as date,
-                SUM(CASE WHEN action = 'BOUGHT' THEN -price * contracts * 100 ELSE 0 END) +
-                SUM(CASE WHEN action = 'SOLD' THEN price * contracts * 100 ELSE 0 END) as daily_pl
+                SUM(CASE WHEN action = 'SOLD' THEN price * contracts * 100 ELSE 0 END) -
+                SUM(CASE WHEN action = 'BOUGHT' THEN price * contracts * 100 ELSE 0 END) as daily_pl
             FROM trades
             WHERE price IS NOT NULL
             GROUP BY DATE(timestamp)
