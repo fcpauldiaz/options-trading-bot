@@ -1,0 +1,11 @@
+.env
+*.pyc
+__pycache__/
+*.log
+logs/
+trades.csv
+.venv/
+venv/
+*.csv
+processed_messages.txt
+
