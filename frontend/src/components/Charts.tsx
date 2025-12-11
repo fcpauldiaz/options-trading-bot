@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { plApi } from '../services/api';
 import { dataStreamService } from '../services/stream';
@@ -10,8 +10,12 @@ const Charts: React.FC = () => {
   const [plHistory, setPLHistory] = useState<any[]>([]);
   const [realizedPL, setRealizedPL] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const hasFetchedRef = useRef(false);
 
   useEffect(() => {
+    if (hasFetchedRef.current) return;
+    hasFetchedRef.current = true;
+
     const fetchChartData = async () => {
       try {
         const [historyData, realizedData] = await Promise.all([

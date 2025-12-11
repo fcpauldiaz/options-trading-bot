@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { positionsApi, plApi } from '../services/api';
 import { dataStreamService } from '../services/stream';
 import './OpenPositions.css';
@@ -6,8 +6,12 @@ import './OpenPositions.css';
 const OpenPositions: React.FC = () => {
   const [positions, setPositions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const hasFetchedRef = useRef(false);
 
   useEffect(() => {
+    if (hasFetchedRef.current) return;
+    hasFetchedRef.current = true;
+
     const fetchPositions = async () => {
       try {
         const [positionsData, unrealizedData] = await Promise.all([

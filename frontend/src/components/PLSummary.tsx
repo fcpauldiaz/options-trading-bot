@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { plApi } from '../services/api';
 import { dataStreamService } from '../services/stream';
 import './PLSummary.css';
@@ -7,8 +7,12 @@ const PLSummary: React.FC = () => {
   const [realizedPL, setRealizedPL] = useState<number>(0);
   const [unrealizedPL, setUnrealizedPL] = useState<number>(0);
   const [loading, setLoading] = useState(true);
+  const hasFetchedRef = useRef(false);
 
   useEffect(() => {
+    if (hasFetchedRef.current) return;
+    hasFetchedRef.current = true;
+
     const fetchPL = async () => {
       try {
         const [realizedData, unrealizedData] = await Promise.all([

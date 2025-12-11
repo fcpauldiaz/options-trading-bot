@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { statsApi, plApi } from '../services/api';
 import { dataStreamService } from '../services/stream';
 import './Statistics.css';
@@ -7,8 +7,12 @@ const Statistics: React.FC = () => {
   const [stats, setStats] = useState<any>(null);
   const [winRate, setWinRate] = useState<number>(0);
   const [loading, setLoading] = useState(true);
+  const fetchInitiatedRef = useRef(false);
 
   useEffect(() => {
+    if (fetchInitiatedRef.current) return;
+    fetchInitiatedRef.current = true;
+
     const fetchStats = async () => {
       try {
         const [statsData, realizedData] = await Promise.all([
