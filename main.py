@@ -37,9 +37,9 @@ class TradingBot:
         self.parser = MessageParser()
         self.tradier_client = TradierClient()
         self.db_client = DBClient()
-        self.db_logger = DBLogger(self.db_client)
-        self.position_tracker = PositionTracker(self.db_client)
         self.option_resolver = OptionResolver(self.tradier_client)
+        self.db_logger = DBLogger(self.db_client, self.option_resolver)
+        self.position_tracker = PositionTracker(self.db_client)
         self.order_executor = OrderExecutor(self.tradier_client, self.position_tracker)
         
     async def initialize(self):
@@ -146,6 +146,37 @@ class TradingBot:
                 if not option_symbol:
                     logger.error(f"Could not resolve option symbol for {trade_data['ticker']} {trade_data['strike']}{trade_data['option_type']}")
                     return
+                
+                if trade_data["action"] == "SOLD" and "price" not in trade_data:
+                    logger.info(f"Fetching price for SOLD trade: {trade_data['ticker']} {trade_data['strike']}{trade_data['option_type']}")
+                    option_data = self.option_resolver.get_option_price(
+                        trade_data["ticker"],
+                        trade_data["strike"],
+                        trade_data["option_type"]
+                    )
+                    
+                    if option_data:
+                        last_price = option_data.get("last")
+                        bid = option_data.get("bid", 0) or 0
+                        ask = option_data.get("ask", 0) or 0
+                        
+                        chain_price = None
+                        if last_price and float(last_price) > 0:
+                            chain_price = float(last_price)
+                        elif bid > 0 and ask > 0:
+                            chain_price = (float(bid) + float(ask)) / 2.0
+                        elif ask > 0:
+                            chain_price = float(ask)
+                        elif bid > 0:
+                            chain_price = float(bid)
+                        
+                        if chain_price:
+                            trade_data["price"] = chain_price
+                            logger.info(f"Fetched price for SOLD trade: ${chain_price:.2f}")
+                        else:
+                            logger.warning(f"Could not determine price for SOLD trade {trade_data['ticker']} {trade_data['strike']}{trade_data['option_type']} - bid: {bid}, ask: {ask}, last: {last_price}")
+                    else:
+                        logger.warning(f"Could not fetch option data for SOLD trade {trade_data['ticker']} {trade_data['strike']}{trade_data['option_type']}")
             
             order_result = self.order_executor.execute_order(trade_data, option_symbol)
             

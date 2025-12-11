@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { plApi } from '../services/api';
+import { dataStreamService } from '../services/stream';
 import './PLSummary.css';
 
 const PLSummary: React.FC = () => {
@@ -35,6 +36,15 @@ const PLSummary: React.FC = () => {
     };
 
     fetchPL();
+
+    const unsubscribe = dataStreamService.subscribe((update) => {
+      if (update.type === 'update' && update.data?.pl) {
+        setRealizedPL(update.data.pl.realized || 0);
+        setUnrealizedPL(update.data.pl.unrealized || 0);
+      }
+    });
+
+    return unsubscribe;
   }, []);
 
   const netPL = realizedPL + unrealizedPL;

@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { format } from 'date-fns';
 import { tradesApi, Trade } from '../services/api';
+import { dataStreamService } from '../services/stream';
 import './TradeHistory.css';
 
 const TradeHistory: React.FC = () => {
@@ -15,10 +16,15 @@ const TradeHistory: React.FC = () => {
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const limit = 50;
+  const filtersRef = useRef(filters);
+  const pageRef = useRef(page);
+  const tradesRef = useRef(trades);
 
   useEffect(() => {
-    fetchTrades();
-  }, [filters, page]);
+    filtersRef.current = filters;
+    pageRef.current = page;
+    tradesRef.current = trades;
+  }, [filters, page, trades]);
 
   const fetchTrades = async () => {
     try {
@@ -42,6 +48,34 @@ const TradeHistory: React.FC = () => {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    fetchTrades();
+  }, [filters, page]);
+
+  useEffect(() => {
+    const unsubscribe = dataStreamService.subscribe((update) => {
+      if (update.type === 'update' && update.data?.stats) {
+        const newTotal = update.data.stats.total_trades;
+        setTotal(prevTotal => {
+          if (newTotal !== prevTotal) {
+            const hasNoFilters = !filtersRef.current.ticker && 
+                                !filtersRef.current.action && 
+                                !filtersRef.current.start_date && 
+                                !filtersRef.current.end_date;
+            
+            if (hasNoFilters && pageRef.current === 1 && tradesRef.current.length > 0) {
+              fetchTrades();
+            }
+            return newTotal;
+          }
+          return prevTotal;
+        });
+      }
+    });
+
+    return unsubscribe;
+  }, []);
 
   const handleFilterChange = (field: string, value: string) => {
     setFilters(prev => ({ ...prev, [field]: value }));

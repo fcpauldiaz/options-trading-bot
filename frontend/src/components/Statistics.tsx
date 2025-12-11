@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { statsApi, plApi } from '../services/api';
+import { dataStreamService } from '../services/stream';
 import './Statistics.css';
 
 const Statistics: React.FC = () => {
@@ -35,6 +36,26 @@ const Statistics: React.FC = () => {
     };
 
     fetchStats();
+
+    const unsubscribe = dataStreamService.subscribe((update) => {
+      if (update.type === 'update' && update.data) {
+        if (update.data.stats) {
+          setStats(update.data.stats);
+        }
+        if (update.data.pl?.realized_pl) {
+          const profitableTrades = update.data.pl.realized_pl.filter(
+            (item: any) => item.realized_pl > 0
+          ).length;
+          const totalClosedTrades = update.data.pl.realized_pl.length;
+          const calculatedWinRate = totalClosedTrades > 0
+            ? (profitableTrades / totalClosedTrades) * 100
+            : 0;
+          setWinRate(calculatedWinRate);
+        }
+      }
+    });
+
+    return unsubscribe;
   }, []);
 
   if (loading || !stats) {

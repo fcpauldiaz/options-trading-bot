@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { plApi } from '../services/api';
+import { dataStreamService } from '../services/stream';
 import './Charts.css';
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8'];
@@ -43,6 +44,19 @@ const Charts: React.FC = () => {
     };
 
     fetchChartData();
+
+    const unsubscribe = dataStreamService.subscribe((update) => {
+      if (update.type === 'update' && update.data) {
+        if (update.data.pl_history) {
+          setPLHistory(update.data.pl_history);
+        }
+        if (update.data.ticker_pl) {
+          setRealizedPL(update.data.ticker_pl);
+        }
+      }
+    });
+
+    return unsubscribe;
   }, []);
 
   if (loading) {

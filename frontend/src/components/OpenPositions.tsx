@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { positionsApi, plApi } from '../services/api';
+import { dataStreamService } from '../services/stream';
 import './OpenPositions.css';
 
 const OpenPositions: React.FC = () => {
@@ -39,6 +40,32 @@ const OpenPositions: React.FC = () => {
     };
 
     fetchPositions();
+
+    const unsubscribe = dataStreamService.subscribe((update) => {
+      if (update.type === 'update' && update.data) {
+        if (update.data.positions && update.data.pl?.unrealized_pl) {
+          const plMap = new Map();
+          update.data.pl.unrealized_pl.forEach((item: any) => {
+            const key = `${item.ticker}-${item.strike}-${item.option_type}`;
+            plMap.set(key, item);
+          });
+
+          const positionsWithPL = update.data.positions.map((pos: any) => {
+            const key = `${pos.ticker}-${pos.strike}-${pos.option_type}`;
+            const plData = plMap.get(key);
+            return {
+              ...pos,
+              current_price: plData?.current_price || null,
+              unrealized_pl: plData?.unrealized_pl || 0,
+            };
+          });
+
+          setPositions(positionsWithPL);
+        }
+      }
+    });
+
+    return unsubscribe;
   }, []);
 
   if (loading) {
