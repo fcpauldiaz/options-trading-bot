@@ -2,7 +2,12 @@ import { useState, useEffect, useRef } from 'react';
 import { format } from 'date-fns';
 import { tradesApi, Trade } from '../services/api';
 import { dataStreamService } from '../services/stream';
-import './TradeHistory.css';
+import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
+import { Input } from './ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { Button } from './ui/button';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
+import { Skeleton } from './ui/skeleton';
 
 const TradeHistory: React.FC = () => {
   const [trades, setTrades] = useState<Trade[]>([]);
@@ -85,97 +90,111 @@ const TradeHistory: React.FC = () => {
   const totalPages = Math.ceil(total / limit);
 
   if (loading && trades.length === 0) {
-    return <div className="trade-history loading">Loading trades...</div>;
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Trade History</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Skeleton className="h-64 w-full" />
+        </CardContent>
+      </Card>
+    );
   }
 
   return (
-    <div className="trade-history">
-      <h2>Trade History</h2>
-      
-      <div className="filters">
-        <input
-          type="text"
-          placeholder="Ticker"
-          value={filters.ticker}
-          onChange={(e) => handleFilterChange('ticker', e.target.value)}
-          className="filter-input"
-        />
-        <select
-          value={filters.action}
-          onChange={(e) => handleFilterChange('action', e.target.value)}
-          className="filter-select"
-        >
-          <option value="">All Actions</option>
-          <option value="BOUGHT">Bought</option>
-          <option value="SOLD">Sold</option>
-        </select>
-        <input
-          type="date"
-          value={filters.start_date}
-          onChange={(e) => handleFilterChange('start_date', e.target.value)}
-          className="filter-input"
-        />
-        <input
-          type="date"
-          value={filters.end_date}
-          onChange={(e) => handleFilterChange('end_date', e.target.value)}
-          className="filter-input"
-        />
-      </div>
-
-      <div className="trades-table-container">
-        <table className="trades-table">
-          <thead>
-            <tr>
-              <th>Date</th>
-              <th>Ticker</th>
-              <th>Strike</th>
-              <th>Type</th>
-              <th>Action</th>
-              <th>Contracts</th>
-              <th>Price</th>
-              <th>Order ID</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {trades.map((trade) => (
-              <tr key={trade.id}>
-                <td>{format(new Date(trade.timestamp), 'MM/dd/yyyy HH:mm')}</td>
-                <td>{trade.ticker}</td>
-                <td>{trade.strike}</td>
-                <td>{trade.option_type}</td>
-                <td className={trade.action === 'BOUGHT' ? 'action-bought' : 'action-sold'}>
-                  {trade.action}
-                </td>
-                <td>{trade.contracts}</td>
-                <td>${trade.price?.toFixed(2) || 'N/A'}</td>
-                <td>{trade.order_id}</td>
-                <td>{trade.status}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {totalPages > 1 && (
-        <div className="pagination">
-          <button
-            onClick={() => setPage(prev => Math.max(1, prev - 1))}
-            disabled={page === 1}
-          >
-            Previous
-          </button>
-          <span>Page {page} of {totalPages}</span>
-          <button
-            onClick={() => setPage(prev => Math.min(totalPages, prev + 1))}
-            disabled={page === totalPages}
-          >
-            Next
-          </button>
+    <Card>
+      <CardHeader>
+        <CardTitle>Trade History</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <Input
+            type="text"
+            placeholder="Ticker"
+            value={filters.ticker}
+            onChange={(e) => handleFilterChange('ticker', e.target.value)}
+          />
+          <Select value={filters.action} onValueChange={(value) => handleFilterChange('action', value)}>
+            <SelectTrigger>
+              <SelectValue placeholder="All Actions" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="">All Actions</SelectItem>
+              <SelectItem value="BOUGHT">Bought</SelectItem>
+              <SelectItem value="SOLD">Sold</SelectItem>
+            </SelectContent>
+          </Select>
+          <Input
+            type="date"
+            value={filters.start_date}
+            onChange={(e) => handleFilterChange('start_date', e.target.value)}
+          />
+          <Input
+            type="date"
+            value={filters.end_date}
+            onChange={(e) => handleFilterChange('end_date', e.target.value)}
+          />
         </div>
-      )}
-    </div>
+
+        <div className="rounded-md border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Date</TableHead>
+                <TableHead>Ticker</TableHead>
+                <TableHead>Strike</TableHead>
+                <TableHead>Type</TableHead>
+                <TableHead>Action</TableHead>
+                <TableHead>Contracts</TableHead>
+                <TableHead>Price</TableHead>
+                <TableHead>Order ID</TableHead>
+                <TableHead>Status</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {trades.map((trade) => (
+                <TableRow key={trade.id}>
+                  <TableCell>{format(new Date(trade.timestamp), 'MM/dd/yyyy HH:mm')}</TableCell>
+                  <TableCell className="font-medium">{trade.ticker}</TableCell>
+                  <TableCell>{trade.strike}</TableCell>
+                  <TableCell>{trade.option_type}</TableCell>
+                  <TableCell>
+                    <span className={trade.action === 'BOUGHT' ? 'text-green-600 font-semibold' : 'text-red-600 font-semibold'}>
+                      {trade.action}
+                    </span>
+                  </TableCell>
+                  <TableCell>{trade.contracts}</TableCell>
+                  <TableCell>${trade.price?.toFixed(2) || 'N/A'}</TableCell>
+                  <TableCell>{trade.order_id}</TableCell>
+                  <TableCell>{trade.status}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+
+        {totalPages > 1 && (
+          <div className="flex items-center justify-center gap-4">
+            <Button
+              variant="outline"
+              onClick={() => setPage(prev => Math.max(1, prev - 1))}
+              disabled={page === 1}
+            >
+              Previous
+            </Button>
+            <span className="text-sm text-muted-foreground">Page {page} of {totalPages}</span>
+            <Button
+              variant="outline"
+              onClick={() => setPage(prev => Math.min(totalPages, prev + 1))}
+              disabled={page === totalPages}
+            >
+              Next
+            </Button>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 };
 

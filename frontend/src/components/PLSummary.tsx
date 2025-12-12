@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { plApi } from '../services/api';
 import { dataStreamService } from '../services/stream';
-import './PLSummary.css';
+import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
+import { Skeleton } from './ui/skeleton';
 
 const PLSummary: React.FC = () => {
   const [realizedPL, setRealizedPL] = useState<number>(0);
@@ -54,33 +55,56 @@ const PLSummary: React.FC = () => {
   const netPL = realizedPL + unrealizedPL;
 
   if (loading) {
-    return <div className="pl-summary loading">Loading P/L data...</div>;
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Profit & Loss Summary</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <Skeleton className="h-24" />
+            <Skeleton className="h-24" />
+            <Skeleton className="h-24" />
+          </div>
+        </CardContent>
+      </Card>
+    );
   }
 
   return (
-    <div className="pl-summary">
-      <h2>Profit & Loss Summary</h2>
-      <div className="pl-cards">
-        <div className="pl-card">
-          <div className="pl-label">Realized P/L</div>
-          <div className={`pl-value ${realizedPL >= 0 ? 'positive' : 'negative'}`}>
-            ${realizedPL.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </div>
+    <Card>
+      <CardHeader>
+        <CardTitle>Profit & Loss Summary</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <Card>
+            <CardContent className="pt-6">
+              <div className="text-sm font-medium text-muted-foreground mb-2">Realized P/L</div>
+              <div className={`text-2xl font-bold ${realizedPL >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                ${realizedPL.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-6">
+              <div className="text-sm font-medium text-muted-foreground mb-2">Unrealized P/L</div>
+              <div className={`text-2xl font-bold ${unrealizedPL >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                ${unrealizedPL.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="border-2 border-primary">
+            <CardContent className="pt-6">
+              <div className="text-sm font-medium text-muted-foreground mb-2">Net P/L</div>
+              <div className={`text-2xl font-bold ${netPL >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                ${netPL.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </div>
+            </CardContent>
+          </Card>
         </div>
-        <div className="pl-card">
-          <div className="pl-label">Unrealized P/L</div>
-          <div className={`pl-value ${unrealizedPL >= 0 ? 'positive' : 'negative'}`}>
-            ${unrealizedPL.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </div>
-        </div>
-        <div className="pl-card net">
-          <div className="pl-label">Net P/L</div>
-          <div className={`pl-value ${netPL >= 0 ? 'positive' : 'negative'}`}>
-            ${netPL.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </div>
-        </div>
-      </div>
-    </div>
+      </CardContent>
+    </Card>
   );
 };
 

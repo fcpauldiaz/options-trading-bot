@@ -2,7 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { plApi } from '../services/api';
 import { dataStreamService } from '../services/stream';
-import './Charts.css';
+import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
+import { Skeleton } from './ui/skeleton';
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8'];
 
@@ -64,7 +65,20 @@ const Charts: React.FC = () => {
   }, []);
 
   if (loading) {
-    return <div className="charts loading">Loading charts...</div>;
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Charts</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <Skeleton className="h-[300px]" />
+            <Skeleton className="h-[300px]" />
+            <Skeleton className="h-[300px]" />
+          </div>
+        </CardContent>
+      </Card>
+    );
   }
 
   const winLossData = realizedPL.reduce((acc, item) => {
@@ -82,60 +96,76 @@ const Charts: React.FC = () => {
   ];
 
   return (
-    <div className="charts">
-      <h2>Charts</h2>
-      <div className="charts-grid">
-        <div className="chart-container">
-          <h3>Cumulative P/L Over Time</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={plHistory}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="date" />
-              <YAxis />
-              <Tooltip formatter={(value: any) => `$${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} />
-              <Legend />
-              <Line type="monotone" dataKey="cumulative_pl" stroke="#8884d8" name="Cumulative P/L" />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
+    <Card>
+      <CardHeader>
+        <CardTitle>Charts</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Cumulative P/L Over Time</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={300}>
+                <LineChart data={plHistory}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="date" />
+                  <YAxis />
+                  <Tooltip formatter={(value: any) => `$${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} />
+                  <Legend />
+                  <Line type="monotone" dataKey="cumulative_pl" stroke="#8884d8" name="Cumulative P/L" />
+                </LineChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
 
-        <div className="chart-container">
-          <h3>P/L by Ticker</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={realizedPL}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="ticker" />
-              <YAxis />
-              <Tooltip formatter={(value: any) => `$${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} />
-              <Bar dataKey="pl" fill="#8884d8" />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">P/L by Ticker</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={realizedPL}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="ticker" />
+                  <YAxis />
+                  <Tooltip formatter={(value: any) => `$${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} />
+                  <Bar dataKey="pl" fill="#8884d8" />
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
 
-        <div className="chart-container">
-          <h3>Win/Loss Distribution</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <PieChart>
-              <Pie
-                data={pieData}
-                cx="50%"
-                cy="50%"
-                labelLine={false}
-                label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
-                outerRadius={80}
-                fill="#8884d8"
-                dataKey="value"
-              >
-                {pieData.map((_entry, index) => (
-                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                ))}
-              </Pie>
-              <Tooltip formatter={(value: any) => `$${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} />
-            </PieChart>
-          </ResponsiveContainer>
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Win/Loss Distribution</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={300}>
+                <PieChart>
+                  <Pie
+                    data={pieData}
+                    cx="50%"
+                    cy="50%"
+                    labelLine={false}
+                    label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                    outerRadius={80}
+                    fill="#8884d8"
+                    dataKey="value"
+                  >
+                    {pieData.map((_entry, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip formatter={(value: any) => `$${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} />
+                </PieChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
         </div>
-      </div>
-    </div>
+      </CardContent>
+    </Card>
   );
 };
 

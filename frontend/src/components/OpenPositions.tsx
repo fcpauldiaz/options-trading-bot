@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { positionsApi, plApi } from '../services/api';
 import { dataStreamService } from '../services/stream';
-import './OpenPositions.css';
+import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
+import { Skeleton } from './ui/skeleton';
 
 const OpenPositions: React.FC = () => {
   const [positions, setPositions] = useState<any[]>([]);
@@ -73,52 +75,69 @@ const OpenPositions: React.FC = () => {
   }, []);
 
   if (loading) {
-    return <div className="open-positions loading">Loading positions...</div>;
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Open Positions</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Skeleton className="h-64 w-full" />
+        </CardContent>
+      </Card>
+    );
   }
 
   if (positions.length === 0) {
     return (
-      <div className="open-positions">
-        <h2>Open Positions</h2>
-        <p>No open positions</p>
-      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>Open Positions</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-muted-foreground">No open positions</p>
+        </CardContent>
+      </Card>
     );
   }
 
   return (
-    <div className="open-positions">
-      <h2>Open Positions</h2>
-      <div className="positions-table-container">
-        <table className="positions-table">
-          <thead>
-            <tr>
-              <th>Ticker</th>
-              <th>Strike</th>
-              <th>Type</th>
-              <th>Quantity</th>
-              <th>Avg Entry</th>
-              <th>Current Price</th>
-              <th>Unrealized P/L</th>
-            </tr>
-          </thead>
-          <tbody>
-            {positions.map((pos, index) => (
-              <tr key={index}>
-                <td>{pos.ticker}</td>
-                <td>{pos.strike}</td>
-                <td>{pos.option_type}</td>
-                <td>{pos.quantity}</td>
-                <td>${pos.avg_entry_price?.toFixed(2) || 'N/A'}</td>
-                <td>${pos.current_price?.toFixed(2) || 'N/A'}</td>
-                <td className={pos.unrealized_pl >= 0 ? 'positive' : 'negative'}>
-                  ${pos.unrealized_pl.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
+    <Card>
+      <CardHeader>
+        <CardTitle>Open Positions</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="rounded-md border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Ticker</TableHead>
+                <TableHead>Strike</TableHead>
+                <TableHead>Type</TableHead>
+                <TableHead>Quantity</TableHead>
+                <TableHead>Avg Entry</TableHead>
+                <TableHead>Current Price</TableHead>
+                <TableHead>Unrealized P/L</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {positions.map((pos, index) => (
+                <TableRow key={index}>
+                  <TableCell className="font-medium">{pos.ticker}</TableCell>
+                  <TableCell>{pos.strike}</TableCell>
+                  <TableCell>{pos.option_type}</TableCell>
+                  <TableCell>{pos.quantity}</TableCell>
+                  <TableCell>${pos.avg_entry_price?.toFixed(2) || 'N/A'}</TableCell>
+                  <TableCell>${pos.current_price?.toFixed(2) || 'N/A'}</TableCell>
+                  <TableCell className={pos.unrealized_pl >= 0 ? 'text-green-600 font-semibold' : 'text-red-600 font-semibold'}>
+                    ${pos.unrealized_pl.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      </CardContent>
+    </Card>
   );
 };
 

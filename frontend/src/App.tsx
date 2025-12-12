@@ -1,4 +1,3 @@
-import './App.css';
 import PLSummary from './components/PLSummary';
 import TradeHistory from './components/TradeHistory';
 import OpenPositions from './components/OpenPositions';
@@ -7,11 +6,11 @@ import Statistics from './components/Statistics';
 
 function App() {
   return (
-    <div className="App">
-      <header className="App-header">
-        <h1>Options Trading Bot Dashboard</h1>
+    <div className="min-h-screen bg-background">
+      <header className="bg-primary text-primary-foreground py-5 px-5 text-center shadow-md">
+        <h1 className="text-3xl font-bold m-0">Options Trading Bot Dashboard</h1>
       </header>
-      <main className="App-main">
+      <main className="max-w-[1400px] mx-auto p-5 flex flex-col gap-5 md:p-5">
         <PLSummary />
         <Statistics />
         <Charts />
