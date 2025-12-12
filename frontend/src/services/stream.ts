@@ -85,7 +85,7 @@ class DataStreamService {
         }
       };
 
-      this.eventSource.onerror = (error) => {
+      this.eventSource.onerror = () => {
         if (this.eventSource?.readyState === EventSource.CLOSED) {
           this.eventSource.close();
           
