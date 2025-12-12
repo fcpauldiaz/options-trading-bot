@@ -115,12 +115,12 @@ const TradeHistory: React.FC = () => {
             value={filters.ticker}
             onChange={(e) => handleFilterChange('ticker', e.target.value)}
           />
-          <Select value={filters.action} onValueChange={(value) => handleFilterChange('action', value)}>
+          <Select value={filters.action || "all"} onValueChange={(value) => handleFilterChange('action', value === "all" ? '' : value)}>
             <SelectTrigger>
               <SelectValue placeholder="All Actions" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">All Actions</SelectItem>
+              <SelectItem value="all">All Actions</SelectItem>
               <SelectItem value="BOUGHT">Bought</SelectItem>
               <SelectItem value="SOLD">Sold</SelectItem>
             </SelectContent>
