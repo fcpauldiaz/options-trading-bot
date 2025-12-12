@@ -68,33 +68,38 @@ class DataStreamService {
 
     this.disconnect();
 
-    const url = `${API_BASE_URL}/stream`;
-    this.eventSource = new EventSource(url);
+    try {
+      const url = `${API_BASE_URL}/stream`;
+      this.eventSource = new EventSource(url);
 
-    this.eventSource.onopen = () => {
-      this.reconnectAttempts = 0;
-    };
+      this.eventSource.onopen = () => {
+        this.reconnectAttempts = 0;
+      };
 
-    this.eventSource.onmessage = (event) => {
-      try {
-        const update: StreamUpdate = JSON.parse(event.data);
-        this.callbacks.forEach(callback => callback(update));
-      } catch (error) {
-        console.error('Error parsing stream message:', error);
-      }
-    };
+      this.eventSource.onmessage = (event) => {
+        try {
+          const update: StreamUpdate = JSON.parse(event.data);
+          this.callbacks.forEach(callback => callback(update));
+        } catch (error) {
+          console.error('Error parsing stream message:', error);
+        }
+      };
 
-    this.eventSource.onerror = (error) => {
-      console.error('Stream error:', error);
-      this.eventSource?.close();
-      
-      if (this.reconnectAttempts < this.maxReconnectAttempts) {
-        this.reconnectAttempts++;
-        setTimeout(() => {
-          this.connect();
-        }, this.reconnectDelay * this.reconnectAttempts);
-      }
-    };
+      this.eventSource.onerror = (error) => {
+        if (this.eventSource?.readyState === EventSource.CLOSED) {
+          this.eventSource.close();
+          
+          if (this.reconnectAttempts < this.maxReconnectAttempts) {
+            this.reconnectAttempts++;
+            setTimeout(() => {
+              this.connect();
+            }, this.reconnectDelay * this.reconnectAttempts);
+          }
+        }
+      };
+    } catch (error) {
+      console.error('Error connecting to stream:', error);
+    }
   }
 
   subscribe(callback: StreamCallback): () => void {

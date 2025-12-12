@@ -35,6 +35,13 @@ const Statistics: React.FC = () => {
         setWinRate(calculatedWinRate);
       } catch (error) {
         console.error('Error fetching statistics:', error);
+        setStats({
+          total_trades: 0,
+          bought_trades: 0,
+          sold_trades: 0,
+          realized_pl: 0
+        });
+        setWinRate(0);
       } finally {
         setLoading(false);
       }
@@ -42,28 +49,37 @@ const Statistics: React.FC = () => {
 
     fetchStats();
 
-    const unsubscribe = dataStreamService.subscribe((update) => {
-      if (update.type === 'update' && update.data) {
-        if (update.data.stats) {
-          setStats(update.data.stats);
+    let unsubscribe: (() => void) | undefined;
+    try {
+      unsubscribe = dataStreamService.subscribe((update) => {
+        if (update.type === 'update' && update.data) {
+          if (update.data.stats) {
+            setStats(update.data.stats);
+          }
+          if (update.data.pl?.realized_pl) {
+            const profitableTrades = update.data.pl.realized_pl.filter(
+              (item: any) => item.realized_pl > 0
+            ).length;
+            const totalClosedTrades = update.data.pl.realized_pl.length;
+            const calculatedWinRate = totalClosedTrades > 0
+              ? (profitableTrades / totalClosedTrades) * 100
+              : 0;
+            setWinRate(calculatedWinRate);
+          }
         }
-        if (update.data.pl?.realized_pl) {
-          const profitableTrades = update.data.pl.realized_pl.filter(
-            (item: any) => item.realized_pl > 0
-          ).length;
-          const totalClosedTrades = update.data.pl.realized_pl.length;
-          const calculatedWinRate = totalClosedTrades > 0
-            ? (profitableTrades / totalClosedTrades) * 100
-            : 0;
-          setWinRate(calculatedWinRate);
-        }
-      }
-    });
+      });
+    } catch (error) {
+      console.error('Error subscribing to stream:', error);
+    }
 
-    return unsubscribe;
+    return () => {
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    };
   }, []);
 
-  if (loading || !stats) {
+  if (loading) {
     return (
       <Card>
         <CardHeader>

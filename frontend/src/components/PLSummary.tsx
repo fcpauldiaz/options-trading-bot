@@ -35,6 +35,8 @@ const PLSummary: React.FC = () => {
         setUnrealizedPL(totalUnrealized);
       } catch (error) {
         console.error('Error fetching P/L data:', error);
+        setRealizedPL(0);
+        setUnrealizedPL(0);
       } finally {
         setLoading(false);
       }
@@ -42,14 +44,23 @@ const PLSummary: React.FC = () => {
 
     fetchPL();
 
-    const unsubscribe = dataStreamService.subscribe((update) => {
-      if (update.type === 'update' && update.data?.pl) {
-        setRealizedPL(update.data.pl.realized || 0);
-        setUnrealizedPL(update.data.pl.unrealized || 0);
-      }
-    });
+    let unsubscribe: (() => void) | undefined;
+    try {
+      unsubscribe = dataStreamService.subscribe((update) => {
+        if (update.type === 'update' && update.data?.pl) {
+          setRealizedPL(update.data.pl.realized || 0);
+          setUnrealizedPL(update.data.pl.unrealized || 0);
+        }
+      });
+    } catch (error) {
+      console.error('Error subscribing to stream:', error);
+    }
 
-    return unsubscribe;
+    return () => {
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    };
   }, []);
 
   const netPL = realizedPL + unrealizedPL;

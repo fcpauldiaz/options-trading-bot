@@ -43,6 +43,8 @@ const Charts: React.FC = () => {
         setRealizedPL(tickerData);
       } catch (error) {
         console.error('Error fetching chart data:', error);
+        setPLHistory([]);
+        setRealizedPL([]);
       } finally {
         setLoading(false);
       }
@@ -50,7 +52,9 @@ const Charts: React.FC = () => {
 
     fetchChartData();
 
-    const unsubscribe = dataStreamService.subscribe((update) => {
+    let unsubscribe: (() => void) | undefined;
+    try {
+      unsubscribe = dataStreamService.subscribe((update) => {
       if (update.type === 'update' && update.data) {
         if (update.data.pl_history) {
           setPLHistory(update.data.pl_history);
@@ -60,8 +64,15 @@ const Charts: React.FC = () => {
         }
       }
     });
+    } catch (error) {
+      console.error('Error subscribing to stream:', error);
+    }
 
-    return unsubscribe;
+    return () => {
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    };
   }, []);
 
   if (loading) {

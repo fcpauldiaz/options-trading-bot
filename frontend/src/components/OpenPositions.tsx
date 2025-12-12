@@ -40,6 +40,7 @@ const OpenPositions: React.FC = () => {
         setPositions(positionsWithPL);
       } catch (error) {
         console.error('Error fetching positions:', error);
+        setPositions([]);
       } finally {
         setLoading(false);
       }
@@ -47,7 +48,9 @@ const OpenPositions: React.FC = () => {
 
     fetchPositions();
 
-    const unsubscribe = dataStreamService.subscribe((update) => {
+    let unsubscribe: (() => void) | undefined;
+    try {
+      unsubscribe = dataStreamService.subscribe((update) => {
       if (update.type === 'update' && update.data) {
         if (update.data.positions && update.data.pl?.unrealized_pl) {
           const plMap = new Map();
@@ -70,8 +73,15 @@ const OpenPositions: React.FC = () => {
         }
       }
     });
+    } catch (error) {
+      console.error('Error subscribing to stream:', error);
+    }
 
-    return unsubscribe;
+    return () => {
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    };
   }, []);
 
   if (loading) {
