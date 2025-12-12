@@ -146,7 +146,7 @@ class DiscordScraper:
                             logger.warning(f"Message {msg.id} has no timestamp, skipping")
                 
                 if filtered_count > 0:
-                    logger.info(f"Filtered {filtered_count} messages from previous days")
+                    logger.debug(f"Filtered {filtered_count} messages from previous days")
                 
                 if messages:
                     logger.info(f"Found {len(messages)} new messages from today")
