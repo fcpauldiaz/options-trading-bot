@@ -1,11 +1,9 @@
 services:
-  backend:
+  bot:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: trading-bot-backend
-    ports:
-      - "4000:80"
+    container_name: trading-bot
     environment:
       - DISCORD_TOKEN=${DISCORD_TOKEN}
       - TRADING_MODE=${TRADING_MODE:-paper}
@@ -22,22 +20,6 @@ services:
     networks:
       - trading-bot-network
 
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    container_name: trading-bot-frontend
-    ports:
-      - "3005:80"
-    depends_on:
-      - backend
-    environment:
-      - REACT_APP_API_URL=/api
-    restart: unless-stopped
-    networks:
-      - trading-bot-network
-
 networks:
   trading-bot-network:
     driver: bridge
-

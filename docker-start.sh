@@ -1,7 +1,6 @@
 #!/bin/bash
 
-echo "Starting Trading Bot with Docker Compose..."
-echo "This will start both the Flask API backend and React frontend"
+echo "Starting Discord Trading Bot with Docker Compose..."
 echo ""
 
 # Check if .env file exists
@@ -14,10 +13,7 @@ fi
 docker-compose up -d
 
 echo ""
-echo "Services started!"
-echo "Frontend: http://localhost:3005"
-echo "Backend API: http://localhost:4000"
+echo "Discord trading bot started!"
 echo ""
 echo "To view logs: docker-compose logs -f"
 echo "To stop: docker-compose down"
-

@@ -1,6 +1,6 @@
 # Discord Trading Bot
 
-Automated trading bot that monitors a Discord channel for trading signals and executes market orders via Tradier API. Includes a React dashboard for viewing trades, positions, and P/L.
+Automated trading bot that monitors a Discord channel for trading signals and executes market orders via Tradier API.
 
 ## Setup
 
@@ -9,7 +9,6 @@ Automated trading bot that monitors a Discord channel for trading signals and ex
 1. Install dependencies:
 ```bash
 pip install -r requirements.txt
-cd frontend && npm install && cd ..
 ```
 
 2. Create a `.env` file with your credentials (copy from `.env.example`):
@@ -30,21 +29,12 @@ TURSO_AUTH_TOKEN=your_auth_token
 python migrate_csv_to_db.py
 ```
 
-4. Run the Flask API:
+4. Run the Discord trading bot:
 ```bash
-python app.py
+python main.py
 ```
-
-5. Run the React frontend (in another terminal):
-```bash
-cd frontend && npm run dev
-```
-
-The frontend will be available at http://localhost:3005 with hot module replacement.
 
 ### Docker Deployment
-
-The Docker setup runs both the Flask API backend and React frontend together.
 
 1. Create a `.env` file with all required environment variables (see `.env.example`)
 
@@ -58,26 +48,20 @@ Or use the convenience script:
 ./docker-start.sh
 ```
 
-3. Access the application:
-   - **Frontend Dashboard**: http://localhost:3005 (includes both UI and API proxy)
-   - **Backend API directly**: http://localhost:4000/api
-
-4. View logs:
+3. View logs:
 ```bash
 docker-compose logs -f
 ```
 
-5. Stop services:
+4. Stop services:
 ```bash
 docker-compose down
 ```
 
-6. For production deployment:
+5. For production deployment:
 ```bash
-docker-compose -f docker-compose.prod.yml up -d
+docker-compose -f docker-compose.prod.yaml up -d
 ```
-
-**Note**: The frontend nginx server automatically proxies `/api` requests to the backend service, so you only need to access the frontend URL.
 
 ## Configuration
 
@@ -93,10 +77,4 @@ docker-compose -f docker-compose.prod.yml up -d
 - Resolves option symbols with closest expiry dates
 - Places market/limit orders via Tradier API
 - Stores trades in Turso (libsql) database
-- React dashboard with:
-  - Trade history with filtering
-  - Open positions with unrealized P/L
-  - Realized and unrealized P/L summary
-  - Charts and statistics
 - Comprehensive logging to file and console
-
