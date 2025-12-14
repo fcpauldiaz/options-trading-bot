@@ -1,6 +1,7 @@
 import argparse
 import asyncio
 import logging
+import os
 import signal
 import sys
 from datetime import datetime
@@ -13,6 +14,8 @@ from order_executor import OrderExecutor
 from db_logger import DBLogger
 from position_tracker import PositionTracker
 from db_client import DBClient
+
+os.makedirs('logs', exist_ok=True)
 
 logging.basicConfig(
     level=logging.INFO,
