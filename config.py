@@ -15,8 +15,8 @@ TRADING_MODE = os.getenv("TRADING_MODE", "live")
 
 DISCORD_CHANNEL_ID = os.getenv("DISCORD_CHANNEL_ID", "")
 
-TURSO_DATABASE_URL = os.getenv("TURSO_DATABASE_URL", "")
-TURSO_AUTH_TOKEN = os.getenv("TURSO_AUTH_TOKEN", "")
+SUPABASE_URL = os.getenv("SUPABASE_URL", "")
+SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
 
 TRADIER_BASE_URL_PAPER = "https://sandbox.tradier.com/v1"
 TRADIER_BASE_URL_LIVE = "https://api.tradier.com/v1"

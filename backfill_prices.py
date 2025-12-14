@@ -42,11 +42,7 @@ def backfill_prices():
         
         logger.info("Fetching trades with NULL prices from database...")
         
-        result = db_client.execute_sync(
-            "SELECT id, ticker, strike, option_type, action, timestamp FROM trades WHERE price IS NULL ORDER BY timestamp ASC"
-        )
-        
-        trades_without_prices = result.rows
+        trades_without_prices = db_client.select_trades(filters={"price_is_null": True, "order_by": "timestamp", "ascending": True})
         total_trades = len(trades_without_prices)
         
         if total_trades == 0:
@@ -59,12 +55,12 @@ def backfill_prices():
         failed_count = 0
         
         for i, row in enumerate(trades_without_prices, 1):
-            trade_id = row[0]
-            ticker = row[1]
-            strike = float(row[2])
-            option_type = row[3]
-            action = row[4]
-            timestamp = row[5]
+            trade_id = row["id"]
+            ticker = row["ticker"]
+            strike = float(row["strike"])
+            option_type = row["option_type"]
+            action = row["action"]
+            timestamp = row["timestamp"]
             
             logger.info(f"[{i}/{total_trades}] Processing trade ID {trade_id}: {action} {ticker} {strike}{option_type} (timestamp: {timestamp})")
             
@@ -75,10 +71,7 @@ def backfill_prices():
                     price = extract_price_from_option_data(option_data)
                     
                     if price:
-                        db_client.execute_sync(
-                            "UPDATE trades SET price = ? WHERE id = ?",
-                            (price, trade_id)
-                        )
+                        db_client.update_trade(trade_id, {"price": price})
                         logger.info(f"  ✓ Updated trade ID {trade_id} with price ${price:.2f}")
                         updated_count += 1
                     else:

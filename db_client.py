@@ -1,12 +1,14 @@
 import os
 import logging
-import libsql
+from typing import Optional, Dict, List, Any
+from supabase import create_client, Client
+from config import SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
 
 logger = logging.getLogger(__name__)
 
 class DBClient:
     _instance = None
-    _conn = None
+    _client: Optional[Client] = None
     
     def __new__(cls):
         if cls._instance is None:
@@ -16,50 +18,97 @@ class DBClient:
     def __init__(self):
         pass
     
-    def _get_connection(self):
-        if self._conn is None:
-            database_url = os.getenv("TURSO_DATABASE_URL")
-            auth_token = os.getenv("TURSO_AUTH_TOKEN")
-            
-            if not database_url:
-                raise ValueError("TURSO_DATABASE_URL environment variable is not set")
-            if not auth_token:
-                raise ValueError("TURSO_AUTH_TOKEN environment variable is not set")
+    def _get_client(self) -> Client:
+        if self._client is None:
+            if not SUPABASE_URL:
+                raise ValueError("SUPABASE_URL environment variable is not set")
+            if not SUPABASE_SERVICE_ROLE_KEY:
+                raise ValueError("SUPABASE_SERVICE_ROLE_KEY environment variable is not set")
             
             try:
-                self._conn = libsql.connect(database_url, auth_token=auth_token)
-                logger.info("Successfully connected to Turso database")
+                self._client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+                logger.info("Successfully connected to Supabase database")
             except Exception as e:
-                logger.error(f"Failed to connect to Turso database: {e}")
+                logger.error(f"Failed to connect to Supabase database: {e}")
                 raise
         
-        return self._conn
+        return self._client
     
-    def execute_sync(self, query, params=None):
-        conn = self._get_connection()
-        cursor = conn.cursor()
-        
+    def insert_trade(self, trade_data: Dict[str, Any]) -> Dict[str, Any]:
+        client = self._get_client()
         try:
-            if params:
-                cursor.execute(query, params)
-            else:
-                cursor.execute(query)
-            
-            conn.commit()
-            
-            class Result:
-                def __init__(self, cursor):
-                    self.cursor = cursor
-                    self.rows = cursor.fetchall()
-            
-            return Result(cursor)
+            response = client.table('trades').insert(trade_data).execute()
+            if response.data and len(response.data) > 0:
+                return response.data[0]
+            return {}
         except Exception as e:
-            logger.error(f"Database query error: {e}")
+            logger.error(f"Error inserting trade: {e}")
+            raise
+    
+    def select_trades(self, filters: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+        client = self._get_client()
+        try:
+            query = client.table('trades').select('*')
+            
+            if filters:
+                if 'price_is_null' in filters and filters['price_is_null']:
+                    query = query.is_('price', 'null')
+                if 'order_by' in filters:
+                    order_by = filters['order_by']
+                    ascending = filters.get('ascending', False)
+                    query = query.order(order_by, desc=not ascending)
+            
+            response = query.execute()
+            return response.data if response.data else []
+        except Exception as e:
+            logger.error(f"Error selecting trades: {e}")
+            raise
+    
+    def update_trade(self, trade_id: str, updates: Dict[str, Any]) -> Dict[str, Any]:
+        client = self._get_client()
+        try:
+            response = client.table('trades').update(updates).eq('id', trade_id).execute()
+            if response.data and len(response.data) > 0:
+                return response.data[0]
+            return {}
+        except Exception as e:
+            logger.error(f"Error updating trade: {e}")
+            raise
+    
+    def upsert_position(self, position_data: Dict[str, Any]) -> Dict[str, Any]:
+        client = self._get_client()
+        try:
+            response = client.table('positions').upsert(position_data).execute()
+            if response.data and len(response.data) > 0:
+                return response.data[0]
+            return {}
+        except Exception as e:
+            logger.error(f"Error upserting position: {e}")
+            raise
+    
+    def select_positions(self, filters: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+        client = self._get_client()
+        try:
+            query = client.table('positions').select('*')
+            
+            if filters:
+                if 'quantity_gt' in filters:
+                    query = query.gt('quantity', filters['quantity_gt'])
+            
+            response = query.execute()
+            return response.data if response.data else []
+        except Exception as e:
+            logger.error(f"Error selecting positions: {e}")
+            raise
+    
+    def delete_position(self, ticker: str, strike: float, option_type: str) -> None:
+        client = self._get_client()
+        try:
+            client.table('positions').delete().eq('ticker', ticker).eq('strike', strike).eq('option_type', option_type).execute()
+        except Exception as e:
+            logger.error(f"Error deleting position: {e}")
             raise
     
     def close(self):
-        if self._conn:
-            self._conn.close()
-            self._conn = None
-            logger.info("Closed Turso database connection")
-
+        self._client = None
+        logger.info("Closed Supabase database connection")
