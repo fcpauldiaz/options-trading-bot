@@ -7,48 +7,21 @@ class PositionTracker:
     def __init__(self, db_client=None):
         self.db_client = db_client or DBClient()
         self.positions = {}
-        self._ensure_tables_exist()
         self.load_positions_from_db()
     
     def _get_position_key(self, ticker, strike, option_type):
         return (ticker.upper(), float(strike), option_type.upper())
     
-    def _ensure_tables_exist(self):
-        try:
-            create_positions_table = """
-            CREATE TABLE IF NOT EXISTS positions (
-                ticker TEXT NOT NULL,
-                strike REAL NOT NULL,
-                option_type TEXT NOT NULL,
-                quantity INTEGER NOT NULL,
-                avg_entry_price REAL,
-                last_updated TEXT NOT NULL,
-                PRIMARY KEY (ticker, strike, option_type)
-            )
-            """
-            
-            self.db_client.execute_sync(create_positions_table)
-            logger.info("Positions table initialized")
-        except Exception as e:
-            logger.error(f"Error creating positions table: {e}")
-            raise
-    
     def load_positions_from_db(self):
         try:
-            select_query = """
-            SELECT ticker, strike, option_type, quantity, avg_entry_price
-            FROM positions
-            WHERE quantity > 0
-            """
+            positions_data = self.db_client.select_positions(filters={"quantity_gt": 0})
             
-            result = self.db_client.execute_sync(select_query)
-            
-            for row in result.rows:
-                ticker = row[0]
-                strike = float(row[1])
-                option_type = row[2]
-                quantity = int(row[3])
-                avg_entry_price = float(row[4]) if row[4] is not None else None
+            for row in positions_data:
+                ticker = row["ticker"]
+                strike = float(row["strike"])
+                option_type = row["option_type"]
+                quantity = int(row["quantity"])
+                avg_entry_price = float(row["avg_entry_price"]) if row.get("avg_entry_price") is not None else None
                 
                 key = self._get_position_key(ticker, strike, option_type)
                 self.positions[key] = {
@@ -125,32 +98,17 @@ class PositionTracker:
         last_updated = datetime.now().isoformat()
         
         if new_quantity > 0:
-            upsert_query = """
-            INSERT INTO positions (ticker, strike, option_type, quantity, avg_entry_price, last_updated)
-            VALUES (?, ?, ?, ?, ?, ?)
-            ON CONFLICT(ticker, strike, option_type) DO UPDATE SET
-                quantity = ?,
-                avg_entry_price = ?,
-                last_updated = ?
-            """
+            position_data = {
+                "ticker": ticker.upper(),
+                "strike": strike,
+                "option_type": option_type.upper(),
+                "quantity": new_quantity,
+                "avg_entry_price": new_avg_price,
+                "last_updated": last_updated
+            }
             
-            self.db_client.execute_sync(
-                upsert_query,
-                (
-                    ticker.upper(), strike, option_type.upper(),
-                    new_quantity, new_avg_price, last_updated,
-                    new_quantity, new_avg_price, last_updated
-                )
-            )
+            self.db_client.upsert_position(position_data)
         else:
-            delete_query = """
-            DELETE FROM positions
-            WHERE ticker = ? AND strike = ? AND option_type = ?
-            """
-            
-            self.db_client.execute_sync(
-                delete_query,
-                (ticker.upper(), strike, option_type.upper())
-            )
+            self.db_client.delete_position(ticker.upper(), strike, option_type.upper())
         
         logger.info(f"Position updated: {ticker} {strike}{option_type} - {action} {quantity} contracts. New position: {new_quantity}, Avg entry: ${new_avg_price:.2f}" if new_avg_price else f"Position updated: {ticker} {strike}{option_type} - {action} {quantity} contracts. New position: {new_quantity}")
