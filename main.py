@@ -13,6 +13,7 @@ from order_executor import OrderExecutor
 from db_logger import DBLogger
 from position_tracker import PositionTracker
 from db_client import DBClient
+from ntfy_notifier import send_trade_notification
 
 logging.basicConfig(
     level=logging.INFO,
@@ -129,11 +130,14 @@ class TradingBot:
                 
                 price_diff = abs(message_price - chain_price)
                 if price_diff > 0.15:
-                    logger.warning(
-                        f"Price validation failed: Message price ${message_price:.2f} differs from chain price ${chain_price:.2f} "
-                        f"by ${price_diff:.2f} (max allowed: $0.15). Order rejected."
-                    )
-                    return
+                    if trade_data["action"] == "BOUGHT" and chain_price < message_price:
+                        logger.info(f"Price validation exception: Chain price ${chain_price:.2f} is lower than message price ${message_price:.2f}. Allowing order for better execution.")
+                    else:
+                        logger.warning(
+                            f"Price validation failed: Message price ${message_price:.2f} differs from chain price ${chain_price:.2f} "
+                            f"by ${price_diff:.2f} (max allowed: $0.15). Order rejected."
+                        )
+                        return
                 else:
                     logger.info(f"Price validation passed: Message price ${message_price:.2f} vs chain price ${chain_price:.2f} (diff: ${price_diff:.2f})")
             else:
@@ -187,6 +191,11 @@ class TradingBot:
                     trade_data_for_log["contracts"] = actual_quantity
                 
                 self.db_logger.log_trade(message.id, trade_data_for_log, option_symbol, order_result)
+                
+                try:
+                    send_trade_notification(trade_data_for_log, order_result)
+                except Exception as e:
+                    logger.error(f"Failed to send notification: {e}", exc_info=True)
                 
                 price = trade_data_for_log.get("price")
                 self.position_tracker.update_position(
