@@ -23,27 +23,27 @@ class MessageParser:
             '⅞': (7, 8),
         }
         self.bought_pattern = re.compile(
-            r'\*{0,2}BOUGHT\*{0,2}\s+([A-Z]+)\s+(\d+\.?\d*)([CP])\s+\$?([\d.]+)\s+.*?\[(\d+)\s+contracts?\]',
+            r'\*{0,2}BOUGHT\*{0,2}\s+(?:([A-Z]+)\s+)?(\d+\.?\d*)([CP])\s+\$?([\d.]+)\s+.*?\[(\d+)\s+contracts?\]',
             re.IGNORECASE
         )
         self.sold_full_pattern = re.compile(
-            r'\*{0,2}SOLD\*{0,2}\s+([A-Z]+)\s+(\d+\.?\d*)([CP])\s+\$?([\d.]+)\s+.*?\[(\d+)\s+contracts?\]',
+            r'\*{0,2}SOLD\*{0,2}\s+(?:([A-Z]+)\s+)?(\d+\.?\d*)([CP])\s+\$?([\d.]+)\s+.*?\[(\d+)\s+contracts?\]',
             re.IGNORECASE
         )
         self.sold_partial_pattern = re.compile(
-            r'\*{0,2}SOLD\*{0,2}\s+(\d+)/(\d+)\s+([A-Z]+)\s+(\d+\.?\d*)([CP])\s+\$?([\d.]+)',
+            r'\*{0,2}SOLD\*{0,2}\s+(\d+)/(\d+)\s+(?:([A-Z]+)\s+)?(\d+\.?\d*)([CP])\s+\$?([\d.]+)',
             re.IGNORECASE
         )
         self.sold_all_out_pattern = re.compile(
-            r'\*{0,2}SOLD\*{0,2}\s+([A-Z]+)\s+(\d+\.?\d*)([CP])\s+\$?([\d.]+)\s+ALL\s+OUT',
+            r'\*{0,2}SOLD\*{0,2}\s+(?:([A-Z]+)\s+)?(\d+\.?\d*)([CP])\s+\$?([\d.]+)\s+ALL\s+OUT',
             re.IGNORECASE
         )
         self.sold_partial_after_pattern = re.compile(
-            r'\*{0,2}SOLD\*{0,2}\s+([A-Z]+)\s+(\d+\.?\d*)([CP])\s+\$?([\d.]+)\s+.*?(\d+)/(\d+)',
+            r'\*{0,2}SOLD\*{0,2}\s+(?:([A-Z]+)\s+)?(\d+\.?\d*)([CP])\s+\$?([\d.]+)\s+.*?(\d+)/(\d+)',
             re.IGNORECASE
         )
         self.sold_fraction_pattern = re.compile(
-            r'\*{0,2}SOLD\*{0,2}\s+([A-Z]+)\s+(\d+\.?\d*)([CP])\s+\$?([\d.]+)\s+.*?([½⅓⅔¼¾⅕⅖⅗⅘⅙⅚⅛⅜⅝⅞]|\d+/\d+)',
+            r'\*{0,2}SOLD\*{0,2}\s+(?:([A-Z]+)\s+)?(\d+\.?\d*)([CP])\s+\$?([\d.]+)\s+.*?([½⅓⅔¼¾⅕⅖⅗⅘⅙⅚⅛⅜⅝⅞]|\d+/\d+)',
             re.IGNORECASE
         )
 
@@ -62,7 +62,7 @@ class MessageParser:
         
         match = self.bought_pattern.search(message_content)
         if match:
-            ticker = match.group(1).upper()
+            ticker = (match.group(1) or "SPX").upper()
             strike = float(match.group(2))
             option_type = match.group(3).upper()
             price = float(match.group(4))
@@ -79,7 +79,7 @@ class MessageParser:
         
         match = self.sold_full_pattern.search(message_content)
         if match:
-            ticker = match.group(1).upper()
+            ticker = (match.group(1) or "SPX").upper()
             strike = float(match.group(2))
             option_type = match.group(3).upper()
             price = float(match.group(4))
@@ -98,7 +98,7 @@ class MessageParser:
         if match:
             sold_quantity = int(match.group(1))
             total_quantity = int(match.group(2))
-            ticker = match.group(3).upper()
+            ticker = (match.group(3) or "SPX").upper()
             strike = float(match.group(4))
             option_type = match.group(5).upper()
             price = float(match.group(6))
@@ -115,7 +115,7 @@ class MessageParser:
         
         match = self.sold_all_out_pattern.search(message_content)
         if match:
-            ticker = match.group(1).upper()
+            ticker = (match.group(1) or "SPX").upper()
             strike = float(match.group(2))
             option_type = match.group(3).upper()
             price = float(match.group(4))
@@ -132,7 +132,7 @@ class MessageParser:
         
         match = self.sold_fraction_pattern.search(message_content)
         if match:
-            ticker = match.group(1).upper()
+            ticker = (match.group(1) or "SPX").upper()
             strike = float(match.group(2))
             option_type = match.group(3).upper()
             price = float(match.group(4))
@@ -155,7 +155,7 @@ class MessageParser:
         
         match = self.sold_partial_after_pattern.search(message_content)
         if match:
-            ticker = match.group(1).upper()
+            ticker = (match.group(1) or "SPX").upper()
             strike = float(match.group(2))
             option_type = match.group(3).upper()
             price = float(match.group(4))
