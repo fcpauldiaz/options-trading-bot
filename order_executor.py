@@ -2,6 +2,7 @@ import logging
 import time
 import requests
 from tradier_client import TradierClient
+from market_hours import is_market_open
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +29,14 @@ class OrderExecutor:
 
     def execute_order(self, trade_data, option_symbol):
         try:
+            if not is_market_open():
+                logger.warning("Order rejected: Market is currently closed")
+                return {
+                    "success": False,
+                    "error": "Market is currently closed",
+                    "response": None
+                }
+            
             action = trade_data["action"].upper()
             ticker = trade_data["ticker"]
             strike = trade_data["strike"]

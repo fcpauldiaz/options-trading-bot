@@ -18,6 +18,7 @@ from position_tracker import PositionTracker
 from db_client import DBClient
 from size_calculator import SizeCalculator
 from ntfy_notifier import send_trade_notification
+from market_hours import is_market_open
 
 os.makedirs('logs', exist_ok=True)
 
@@ -229,6 +230,11 @@ class TradingBot:
         
         while self.running:
             try:
+                if not is_market_open():
+                    logger.debug("Market is closed. Skipping Discord scraping.")
+                    await asyncio.sleep(1)
+                    continue
+                
                 messages = await self.scraper.get_new_messages()
                 for message in messages:
                     await self.process_message(message)
