@@ -1,4 +1,6 @@
 import logging
+import time
+import requests
 from tradier_client import TradierClient
 
 logger = logging.getLogger(__name__)
@@ -16,6 +18,13 @@ class OrderExecutor:
             return "sell_to_close"
         else:
             raise ValueError(f"Unknown action: {action}")
+
+    def _is_retryable_error(self, exception):
+        if isinstance(exception, requests.exceptions.RequestException):
+            if hasattr(exception, 'response') and exception.response is not None:
+                status_code = exception.response.status_code
+                return status_code >= 500 or status_code == 429
+        return False
 
     def execute_order(self, trade_data, option_symbol):
         try:
@@ -66,7 +75,20 @@ class OrderExecutor:
             
             logger.info(f"Placing order: {action} {actual_quantity} {option_symbol} ({side})")
             
-            response = self.client.place_order(order_data)
+            max_retries = 3
+            retry_delay = 1
+            
+            for attempt in range(max_retries):
+                try:
+                    response = self.client.place_order(order_data)
+                    break
+                except Exception as e:
+                    if attempt < max_retries - 1 and self._is_retryable_error(e):
+                        wait_time = retry_delay * (2 ** attempt)
+                        logger.warning(f"Order placement failed (attempt {attempt + 1}/{max_retries}): {e}. Retrying in {wait_time}s...")
+                        time.sleep(wait_time)
+                    else:
+                        raise
             
             if "order" in response:
                 order_info = response["order"]

@@ -109,6 +109,68 @@ class DBClient:
             logger.error(f"Error deleting position: {e}")
             raise
     
+    def get_daily_pnl(self) -> float:
+        from datetime import datetime, date
+        
+        client = self._get_client()
+        try:
+            today = date.today()
+            today_str = today.isoformat()
+            
+            query = client.table('trades').select('*')
+            query = query.gte('timestamp', f"{today_str}T00:00:00")
+            query = query.lt('timestamp', f"{today_str}T23:59:59")
+            query = query.order('timestamp', desc=False)
+            
+            response = query.execute()
+            trades = response.data if response.data else []
+            
+            if not trades:
+                logger.debug("No trades found for today")
+                return 0.0
+            
+            pnl = 0.0
+            position_tracker = {}
+            
+            for trade in trades:
+                ticker = trade.get('ticker', '').upper()
+                strike = float(trade.get('strike', 0))
+                option_type = trade.get('option_type', '').upper()
+                action = trade.get('action', '').upper()
+                contracts = int(trade.get('contracts', 0))
+                price = float(trade.get('price', 0)) if trade.get('price') else 0
+                
+                if not price or contracts == 0:
+                    continue
+                
+                key = (ticker, strike, option_type)
+                
+                if action == "BOUGHT":
+                    if key not in position_tracker:
+                        position_tracker[key] = {"quantity": 0, "total_cost": 0.0}
+                    position_tracker[key]["quantity"] += contracts
+                    position_tracker[key]["total_cost"] += price * contracts * 100
+                elif action == "SOLD":
+                    if key in position_tracker and position_tracker[key]["quantity"] > 0:
+                        sold_quantity = min(contracts, position_tracker[key]["quantity"])
+                        avg_cost = position_tracker[key]["total_cost"] / (position_tracker[key]["quantity"] * 100) if position_tracker[key]["quantity"] > 0 else 0
+                        proceeds = price * sold_quantity * 100
+                        cost_basis = avg_cost * sold_quantity * 100
+                        trade_pnl = proceeds - cost_basis
+                        pnl += trade_pnl
+                        
+                        position_tracker[key]["quantity"] -= sold_quantity
+                        position_tracker[key]["total_cost"] -= avg_cost * sold_quantity * 100
+                        
+                        if position_tracker[key]["quantity"] <= 0:
+                            position_tracker[key] = {"quantity": 0, "total_cost": 0.0}
+            
+            logger.info(f"Daily P&L calculated: ${pnl:.2f} from {len(trades)} trades")
+            return pnl
+        except Exception as e:
+            logger.error(f"Error calculating daily P&L: {e}", exc_info=True)
+            return 0.0
+    
     def close(self):
         self._client = None
         logger.info("Closed Supabase database connection")

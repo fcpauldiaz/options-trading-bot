@@ -113,6 +113,40 @@ class OptionResolver:
                         return symbol
         return None
 
+    def get_option_price_with_expiration(self, ticker, strike, option_type, expiration_date):
+        try:
+            option_type_upper = option_type.upper()
+            
+            if option_type_upper not in ["C", "P"]:
+                logger.error(f"Invalid option type: {option_type}")
+                return None
+            
+            if not expiration_date:
+                logger.error(f"Expiration date is required")
+                return None
+            
+            if isinstance(expiration_date, str):
+                expiration_date = self._parse_expiration_date(expiration_date)
+                if not expiration_date:
+                    logger.error(f"Could not parse expiration date: {expiration_date}")
+                    return None
+            
+            chain = self._get_option_chain(ticker, expiration_date, use_cache=False)
+            if not chain:
+                logger.error(f"Could not retrieve option chain for {ticker} exp {expiration_date}")
+                return None
+            
+            option = self._find_option_in_chain(chain, strike, option_type, return_full_option=True)
+            
+            if option:
+                return option
+            else:
+                logger.error(f"Could not find option in chain: {ticker} {strike}{option_type} (exp: {expiration_date})")
+                return None
+        except Exception as e:
+            logger.error(f"Error getting option price for {ticker} {strike}{option_type} with expiration {expiration_date}: {e}", exc_info=True)
+            return None
+
     def get_option_price(self, ticker, strike, option_type):
         try:
             option_type_upper = option_type.upper()
@@ -140,6 +174,62 @@ class OptionResolver:
                 return None
         except Exception as e:
             logger.error(f"Error getting option price for {ticker} {strike}{option_type}: {e}", exc_info=True)
+            return None
+
+    def resolve_option_symbol_with_expiration(self, ticker, strike, option_type, expiration_date):
+        try:
+            option_type_upper = option_type.upper()
+            
+            if option_type_upper not in ["C", "P"]:
+                logger.error(f"Invalid option type: {option_type}")
+                return None
+            
+            if not expiration_date:
+                logger.error(f"Expiration date is required")
+                return None
+            
+            if isinstance(expiration_date, str):
+                expiration_date = self._parse_expiration_date(expiration_date)
+                if not expiration_date:
+                    logger.error(f"Could not parse expiration date: {expiration_date}")
+                    return None
+            
+            expirations = self._get_expirations(ticker)
+            if not expirations:
+                logger.error(f"Could not get expirations for {ticker}")
+                return None
+            
+            if expiration_date not in expirations:
+                logger.warning(f"Exact expiration {expiration_date} not found in available expirations. Available: {expirations[:5]}")
+                closest = None
+                min_delta = None
+                for exp in expirations:
+                    delta = abs((exp - expiration_date).days)
+                    if min_delta is None or delta < min_delta:
+                        min_delta = delta
+                        closest = exp
+                if closest and min_delta <= 7:
+                    logger.info(f"Using closest expiration: {closest} (delta: {min_delta} days)")
+                    expiration_date = closest
+                else:
+                    logger.error(f"Could not find matching expiration for {expiration_date}")
+                    return None
+            
+            chain = self._get_option_chain(ticker, expiration_date)
+            if not chain:
+                logger.error(f"Could not retrieve option chain for {ticker} exp {expiration_date}")
+                return None
+            
+            option_symbol = self._find_option_in_chain(chain, strike, option_type)
+            
+            if option_symbol:
+                logger.info(f"Resolved option symbol: {ticker} {strike}{option_type} -> {option_symbol} (exp: {expiration_date})")
+                return option_symbol
+            else:
+                logger.error(f"Could not find option in chain: {ticker} {strike}{option_type} (exp: {expiration_date})")
+                return None
+        except Exception as e:
+            logger.error(f"Error resolving option symbol for {ticker} {strike}{option_type} with expiration {expiration_date}: {e}", exc_info=True)
             return None
 
     def resolve_option_symbol(self, ticker, strike, option_type):
