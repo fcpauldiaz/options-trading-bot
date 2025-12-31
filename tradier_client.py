@@ -6,15 +6,17 @@ from config import get_tradier_api_key, get_tradier_base_url, get_tradier_accoun
 logger = logging.getLogger(__name__)
 
 class TradierClient:
-    def __init__(self):
-        self.api_key = get_tradier_api_key()
-        self.base_url = get_tradier_base_url()
-        self.account_id = get_tradier_account_id()
+    def __init__(self, mode=None):
+        self.mode = mode
+        self.api_key = get_tradier_api_key(mode)
+        self.base_url = get_tradier_base_url(mode)
+        self.account_id = get_tradier_account_id(mode)
         self.headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Accept": "application/json"
         }
-        logger.info(f"Initialized Tradier client - Mode: {self.base_url}, Account: {self.account_id}")
+        mode_display = mode if mode else "default"
+        logger.info(f"Initialized Tradier client - Mode: {mode_display} ({self.base_url}), Account: {self.account_id}")
 
     def _make_request(self, method, endpoint, params=None, data=None):
         url = f"{self.base_url}{endpoint}"

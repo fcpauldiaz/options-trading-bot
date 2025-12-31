@@ -5,7 +5,7 @@ import os
 import signal
 import sys
 from datetime import datetime
-from config import DISCORD_TOKEN, TRADING_MODE, DISCORD_CHANNEL_ID_2
+from config import DISCORD_TOKEN, TRADING_MODE, TRADING_MODE_CHANNEL_2, DISCORD_CHANNEL_ID_2
 from discord_scraper import DiscordScraper
 from discord_scraper_2 import DiscordScraper2
 from message_parser import MessageParser
@@ -53,12 +53,23 @@ class TradingBot:
         self.order_executor = OrderExecutor(self.tradier_client, self.position_tracker)
         self.size_calculator = SizeCalculator(self.db_client) if DISCORD_CHANNEL_ID_2 else None
         
+        if DISCORD_CHANNEL_ID_2:
+            self.tradier_client_2 = TradierClient(TRADING_MODE_CHANNEL_2)
+            self.option_resolver_2 = OptionResolver(self.tradier_client_2)
+            self.order_executor_2 = OrderExecutor(self.tradier_client_2, self.position_tracker)
+        else:
+            self.tradier_client_2 = None
+            self.option_resolver_2 = None
+            self.order_executor_2 = None
+        
     async def initialize(self):
         if not DISCORD_TOKEN:
             logger.error("DISCORD_TOKEN not set. Please set it in .env file or environment variable.")
             sys.exit(1)
         
-        logger.info(f"Starting trading bot in {TRADING_MODE} mode")
+        logger.info(f"Starting trading bot - Channel 1: {TRADING_MODE} mode")
+        if DISCORD_CHANNEL_ID_2:
+            logger.info(f"Channel 2 trading mode: {TRADING_MODE_CHANNEL_2}")
         await self.scraper.connect()
         if self.scraper_2:
             await self.scraper_2.connect()
@@ -293,7 +304,7 @@ class TradingBot:
                         logger.warning(f"LOTTO trade rejected: Daily P&L is ${daily_pnl:.2f} (must be positive)")
                         return
                 
-                option_data = self.option_resolver.get_option_price(
+                option_data = self.option_resolver_2.get_option_price(
                     trade_data["ticker"],
                     trade_data["strike"],
                     trade_data["option_type"]
@@ -331,7 +342,7 @@ class TradingBot:
                 trade_data["contracts"] = contracts
                 trade_data["price"] = chain_price
                 
-                option_symbol = self.option_resolver.resolve_option_symbol_with_expiration(
+                option_symbol = self.option_resolver_2.resolve_option_symbol_with_expiration(
                     trade_data["ticker"],
                     trade_data["strike"],
                     trade_data["option_type"],
@@ -371,7 +382,7 @@ class TradingBot:
                     logger.warning(f"SOLD order format not recognized")
                     return
                 
-                option_symbol = self.option_resolver.resolve_option_symbol_with_expiration(
+                option_symbol = self.option_resolver_2.resolve_option_symbol_with_expiration(
                     trade_data["ticker"],
                     trade_data["strike"],
                     trade_data["option_type"],
@@ -383,7 +394,7 @@ class TradingBot:
                     return
                 
                 if "price" not in trade_data:
-                    option_data = self.option_resolver.get_option_price_with_expiration(
+                    option_data = self.option_resolver_2.get_option_price_with_expiration(
                         trade_data["ticker"],
                         trade_data["strike"],
                         trade_data["option_type"],
@@ -422,7 +433,7 @@ class TradingBot:
                 logger.error(f"Option symbol not resolved for {trade_data.get('ticker', 'unknown')} {trade_data.get('strike', 'unknown')}{trade_data.get('option_type', 'unknown')}")
                 return
             
-            order_result = self.order_executor.execute_order(trade_data, option_symbol)
+            order_result = self.order_executor_2.execute_order(trade_data, option_symbol)
             
             if order_result.get("success"):
                 actual_quantity = order_result.get("actual_quantity", trade_data["contracts"])

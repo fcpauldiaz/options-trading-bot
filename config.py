@@ -12,6 +12,7 @@ TRADIER_PAPER_ACCOUNT_ID = os.getenv("TRADIER_PAPER_ACCOUNT_ID", "")
 TRADIER_LIVE_ACCOUNT_ID = os.getenv("TRADIER_LIVE_ACCOUNT_ID", "")
 
 TRADING_MODE = os.getenv("TRADING_MODE", "live")
+TRADING_MODE_CHANNEL_2 = os.getenv("TRADING_MODE_CHANNEL_2", "paper")
 
 DISCORD_CHANNEL_ID = os.getenv("DISCORD_CHANNEL_ID", "")
 DISCORD_CHANNEL_ID_2 = os.getenv("DISCORD_CHANNEL_ID_2", "")
@@ -22,12 +23,18 @@ SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
 TRADIER_BASE_URL_PAPER = "https://sandbox.tradier.com/v1"
 TRADIER_BASE_URL_LIVE = "https://api.tradier.com/v1"
 
-def get_tradier_api_key():
-    return TRADIER_PAPER_API_KEY if TRADING_MODE == "paper" else TRADIER_LIVE_API_KEY
+def get_tradier_api_key(mode=None):
+    if mode is None:
+        mode = TRADING_MODE
+    return TRADIER_PAPER_API_KEY if mode == "paper" else TRADIER_LIVE_API_KEY
 
-def get_tradier_account_id():
-    return TRADIER_PAPER_ACCOUNT_ID if TRADING_MODE == "paper" else TRADIER_LIVE_ACCOUNT_ID
+def get_tradier_account_id(mode=None):
+    if mode is None:
+        mode = TRADING_MODE
+    return TRADIER_PAPER_ACCOUNT_ID if mode == "paper" else TRADIER_LIVE_ACCOUNT_ID
 
-def get_tradier_base_url():
-    return TRADIER_BASE_URL_PAPER if TRADING_MODE == "paper" else TRADIER_BASE_URL_LIVE
+def get_tradier_base_url(mode=None):
+    if mode is None:
+        mode = TRADING_MODE
+    return TRADIER_BASE_URL_PAPER if mode == "paper" else TRADIER_BASE_URL_LIVE
 
