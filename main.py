@@ -284,16 +284,6 @@ class TradingBot:
             trade_data = self.parser_2.parse(content)
             if not trade_data.get("valid"):
                 logger.warning(f"Message {message.id} did not match trading format: {content}")
-                try:
-                    send_scraper2_failure_notification(
-                        message.id,
-                        "parsing_error",
-                        f"Message did not match trading format: {content[:100]}",
-                        None,
-                        trading_mode_2
-                    )
-                except Exception as e:
-                    logger.error(f"Failed to send failure notification: {e}", exc_info=True)
                 return
             
             if trade_data.get("error"):
