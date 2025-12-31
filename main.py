@@ -17,7 +17,7 @@ from db_logger import DBLogger
 from position_tracker import PositionTracker
 from db_client import DBClient
 from size_calculator import SizeCalculator
-from ntfy_notifier import send_trade_notification
+from ntfy_notifier import send_trade_notification, send_scraper2_entry_notification, send_scraper2_failure_notification
 from market_hours import is_market_open
 
 os.makedirs('logs', exist_ok=True)
@@ -216,7 +216,8 @@ class TradingBot:
                 self.db_logger.log_trade(message.id, trade_data_for_log, option_symbol, order_result)
                 
                 try:
-                    send_trade_notification(trade_data_for_log, order_result)
+                    trading_mode = self.tradier_client.get_trading_mode()
+                    send_trade_notification(trade_data_for_log, order_result, trading_mode)
                 except Exception as e:
                     logger.error(f"Failed to send notification: {e}", exc_info=True)
                 
@@ -278,13 +279,36 @@ class TradingBot:
                 logger.error("Parser 2 not initialized")
                 return
             
+            trading_mode_2 = self.tradier_client_2.get_trading_mode() if self.tradier_client_2 else "paper"
+            
             trade_data = self.parser_2.parse(content)
             if not trade_data.get("valid"):
                 logger.warning(f"Message {message.id} did not match trading format: {content}")
+                try:
+                    send_scraper2_failure_notification(
+                        message.id,
+                        "parsing_error",
+                        f"Message did not match trading format: {content[:100]}",
+                        None,
+                        trading_mode_2
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to send failure notification: {e}", exc_info=True)
                 return
             
             if trade_data.get("error"):
-                logger.warning(f"Message {message.id} parsing error: {trade_data.get('error')}")
+                error_msg = trade_data.get('error', 'Unknown parsing error')
+                logger.warning(f"Message {message.id} parsing error: {error_msg}")
+                try:
+                    send_scraper2_failure_notification(
+                        message.id,
+                        "parsing_error",
+                        error_msg,
+                        trade_data,
+                        trading_mode_2
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to send failure notification: {e}", exc_info=True)
                 return
             
             action = trade_data["action"]
@@ -293,6 +317,16 @@ class TradingBot:
             if action == "BOUGHT":
                 if "size_indicator" not in trade_data:
                     logger.warning(f"BOUGHT order rejected: No size indicator found in message {message.id}")
+                    try:
+                        send_scraper2_failure_notification(
+                            message.id,
+                            "validation_error",
+                            "No size indicator found in BOUGHT order",
+                            trade_data,
+                            trading_mode_2
+                        )
+                    except Exception as e:
+                        logger.error(f"Failed to send failure notification: {e}", exc_info=True)
                     return
                 
                 size_indicator = trade_data["size_indicator"]
@@ -302,6 +336,16 @@ class TradingBot:
                     daily_pnl = self.db_client.get_daily_pnl()
                     if daily_pnl <= 0:
                         logger.warning(f"LOTTO trade rejected: Daily P&L is ${daily_pnl:.2f} (must be positive)")
+                        try:
+                            send_scraper2_failure_notification(
+                                message.id,
+                                "validation_error",
+                                f"LOTTO trade rejected: Daily P&L is ${daily_pnl:.2f} (must be positive)",
+                                trade_data,
+                                trading_mode_2
+                            )
+                        except Exception as e:
+                            logger.error(f"Failed to send failure notification: {e}", exc_info=True)
                         return
                 
                 option_data = self.option_resolver_2.get_option_price(
@@ -311,7 +355,18 @@ class TradingBot:
                 )
                 
                 if not option_data:
-                    logger.error(f"Could not get option price data for {trade_data['ticker']} {trade_data['strike']}{trade_data['option_type']}")
+                    error_msg = f"Could not get option price data for {trade_data['ticker']} {trade_data['strike']}{trade_data['option_type']}"
+                    logger.error(error_msg)
+                    try:
+                        send_scraper2_failure_notification(
+                            message.id,
+                            "data_error",
+                            error_msg,
+                            trade_data,
+                            trading_mode_2
+                        )
+                    except Exception as e:
+                        logger.error(f"Failed to send failure notification: {e}", exc_info=True)
                     return
                 
                 chain_price = None
@@ -331,12 +386,34 @@ class TradingBot:
                 
                 dollar_amount = self.size_calculator.get_dollar_amount(size_indicator, daily_pnl)
                 if dollar_amount is None:
-                    logger.error(f"Could not determine dollar amount for size indicator: {size_indicator}")
+                    error_msg = f"Could not determine dollar amount for size indicator: {size_indicator}"
+                    logger.error(error_msg)
+                    try:
+                        send_scraper2_failure_notification(
+                            message.id,
+                            "calculation_error",
+                            error_msg,
+                            trade_data,
+                            trading_mode_2
+                        )
+                    except Exception as e:
+                        logger.error(f"Failed to send failure notification: {e}", exc_info=True)
                     return
                 
                 contracts = self.size_calculator.calculate_contracts(dollar_amount, chain_price)
                 if contracts <= 0:
-                    logger.warning(f"Calculated contracts is 0 or negative for {trade_data['ticker']} {trade_data['strike']}{trade_data['option_type']}")
+                    error_msg = f"Calculated contracts is 0 or negative for {trade_data['ticker']} {trade_data['strike']}{trade_data['option_type']}"
+                    logger.warning(error_msg)
+                    try:
+                        send_scraper2_failure_notification(
+                            message.id,
+                            "calculation_error",
+                            error_msg,
+                            trade_data,
+                            trading_mode_2
+                        )
+                    except Exception as e:
+                        logger.error(f"Failed to send failure notification: {e}", exc_info=True)
                     return
                 
                 trade_data["contracts"] = contracts
@@ -350,7 +427,18 @@ class TradingBot:
                 )
                 
                 if not option_symbol:
-                    logger.error(f"Could not resolve option symbol for {trade_data['ticker']} {trade_data['strike']}{trade_data['option_type']} exp {trade_data['expiration_date']}")
+                    error_msg = f"Could not resolve option symbol for {trade_data['ticker']} {trade_data['strike']}{trade_data['option_type']} exp {trade_data['expiration_date']}"
+                    logger.error(error_msg)
+                    try:
+                        send_scraper2_failure_notification(
+                            message.id,
+                            "symbol_resolution_error",
+                            error_msg,
+                            trade_data,
+                            trading_mode_2
+                        )
+                    except Exception as e:
+                        logger.error(f"Failed to send failure notification: {e}", exc_info=True)
                     return
                 
                 logger.info(f"Parsed trade (scraper 2): {trade_data['action']} {trade_data['contracts']} {trade_data['ticker']} {trade_data['strike']}{trade_data['option_type']} exp {trade_data['expiration_date']} [${dollar_amount:.2f}, {size_indicator}]")
@@ -363,7 +451,18 @@ class TradingBot:
                 )
                 
                 if position <= 0:
-                    logger.warning(f"SOLD order rejected: No open position for {trade_data['ticker']} {trade_data['strike']}{trade_data['option_type']}")
+                    error_msg = f"SOLD order rejected: No open position for {trade_data['ticker']} {trade_data['strike']}{trade_data['option_type']}"
+                    logger.warning(error_msg)
+                    try:
+                        send_scraper2_failure_notification(
+                            message.id,
+                            "validation_error",
+                            error_msg,
+                            trade_data,
+                            trading_mode_2
+                        )
+                    except Exception as e:
+                        logger.error(f"Failed to send failure notification: {e}", exc_info=True)
                     return
                 
                 if trade_data.get("all_out"):
@@ -379,7 +478,18 @@ class TradingBot:
                     trade_data["contracts"] = remaining
                     logger.info(f"Fraction detected ({numerator}/{denominator}): Position {position}, selling {sold_quantity}, remaining {remaining} contracts")
                 else:
-                    logger.warning(f"SOLD order format not recognized")
+                    error_msg = "SOLD order format not recognized"
+                    logger.warning(error_msg)
+                    try:
+                        send_scraper2_failure_notification(
+                            message.id,
+                            "validation_error",
+                            error_msg,
+                            trade_data,
+                            trading_mode_2
+                        )
+                    except Exception as e:
+                        logger.error(f"Failed to send failure notification: {e}", exc_info=True)
                     return
                 
                 option_symbol = self.option_resolver_2.resolve_option_symbol_with_expiration(
@@ -390,7 +500,18 @@ class TradingBot:
                 )
                 
                 if not option_symbol:
-                    logger.error(f"Could not resolve option symbol for {trade_data['ticker']} {trade_data['strike']}{trade_data['option_type']} exp {trade_data['expiration_date']}")
+                    error_msg = f"Could not resolve option symbol for {trade_data['ticker']} {trade_data['strike']}{trade_data['option_type']} exp {trade_data['expiration_date']}"
+                    logger.error(error_msg)
+                    try:
+                        send_scraper2_failure_notification(
+                            message.id,
+                            "symbol_resolution_error",
+                            error_msg,
+                            trade_data,
+                            trading_mode_2
+                        )
+                    except Exception as e:
+                        logger.error(f"Failed to send failure notification: {e}", exc_info=True)
                     return
                 
                 if "price" not in trade_data:
@@ -426,12 +547,34 @@ class TradingBot:
                 
                 logger.info(f"Parsed trade (scraper 2): {trade_data['action']} {trade_data['contracts']} {trade_data['ticker']} {trade_data['strike']}{trade_data['option_type']} exp {trade_data['expiration_date']}")
             else:
-                logger.warning(f"Unknown action: {action}")
+                error_msg = f"Unknown action: {action}"
+                logger.warning(error_msg)
+                try:
+                    send_scraper2_failure_notification(
+                        message.id,
+                        "validation_error",
+                        error_msg,
+                        trade_data,
+                        trading_mode_2
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to send failure notification: {e}", exc_info=True)
                 return
             
             if not option_symbol:
-                logger.error(f"Option symbol not resolved for {trade_data.get('ticker', 'unknown')} {trade_data.get('strike', 'unknown')}{trade_data.get('option_type', 'unknown')}")
-                return
+                error_msg = f"Option symbol not resolved for {trade_data.get('ticker', 'unknown')} {trade_data.get('strike', 'unknown')}{trade_data.get('option_type', 'unknown')}"
+                logger.error(error_msg)
+                    try:
+                        send_scraper2_failure_notification(
+                            message.id,
+                            "symbol_resolution_error",
+                            error_msg,
+                            trade_data,
+                            trading_mode_2
+                        )
+                    except Exception as e:
+                        logger.error(f"Failed to send failure notification: {e}", exc_info=True)
+                    return
             
             order_result = self.order_executor_2.execute_order(trade_data, option_symbol)
             
@@ -458,10 +601,32 @@ class TradingBot:
                     price
                 )
             else:
-                logger.error(f"Order failed: {order_result.get('error', 'Unknown error')}")
+                error_msg = order_result.get('error', 'Unknown error')
+                logger.error(f"Order failed: {error_msg}")
+                try:
+                    send_scraper2_failure_notification(
+                        message.id,
+                        "order_failure",
+                        error_msg,
+                        trade_data,
+                        trading_mode_2
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to send failure notification: {e}", exc_info=True)
                 
         except Exception as e:
             logger.error(f"Error processing message (scraper 2) {message.id}: {e}", exc_info=True)
+            try:
+                trading_mode_2 = self.tradier_client_2.get_trading_mode() if self.tradier_client_2 else "paper"
+                send_scraper2_failure_notification(
+                    message.id,
+                    "processing_error",
+                    f"Unexpected error: {str(e)}",
+                    None,
+                    trading_mode_2
+                )
+            except Exception as notif_e:
+                logger.error(f"Failed to send failure notification: {notif_e}", exc_info=True)
 
     async def shutdown(self):
         logger.info("Shutting down bot...")

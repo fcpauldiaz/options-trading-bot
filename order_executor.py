@@ -3,6 +3,7 @@ import time
 import requests
 from tradier_client import TradierClient
 from market_hours import is_market_open
+from ntfy_notifier import send_order_placement_notification
 
 logger = logging.getLogger(__name__)
 
@@ -90,6 +91,11 @@ class OrderExecutor:
             for attempt in range(max_retries):
                 try:
                     response = self.client.place_order(order_data)
+                    try:
+                        trading_mode = self.client.get_trading_mode()
+                        send_order_placement_notification(trade_data, order_data, trading_mode)
+                    except Exception as e:
+                        logger.error(f"Failed to send order placement notification: {e}", exc_info=True)
                     break
                 except Exception as e:
                     if attempt < max_retries - 1 and self._is_retryable_error(e):

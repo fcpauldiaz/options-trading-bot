@@ -68,4 +68,15 @@ class TradierClient:
     def place_order(self, order_data):
         endpoint = f"/accounts/{self.account_id}/orders"
         return self._make_request("POST", endpoint, data=order_data)
+    
+    def get_trading_mode(self):
+        """
+        Get the trading mode (paper or live).
+        
+        Returns:
+            str: "paper" or "live"
+        """
+        if self.mode:
+            return self.mode
+        return "paper" if "sandbox" in self.base_url else "live"
 

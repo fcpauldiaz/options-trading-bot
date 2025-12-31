@@ -6,9 +6,9 @@ logger = logging.getLogger(__name__)
 class SizeCalculator:
     SIZE_AMOUNTS = {
         "LOTTO": 300,
-        "SMALL": 2500,
-        "GRADE B": 5000,
-        "GRADE A": 10000
+        "SMALL": 800,
+        "GRADE B": 1000,
+        "GRADE A": 2000
     }
     
     def __init__(self, db_client=None):
