@@ -564,17 +564,17 @@ class TradingBot:
             if not option_symbol:
                 error_msg = f"Option symbol not resolved for {trade_data.get('ticker', 'unknown')} {trade_data.get('strike', 'unknown')}{trade_data.get('option_type', 'unknown')}"
                 logger.error(error_msg)
-                    try:
-                        send_scraper2_failure_notification(
-                            message.id,
-                            "symbol_resolution_error",
-                            error_msg,
-                            trade_data,
-                            trading_mode_2
-                        )
-                    except Exception as e:
-                        logger.error(f"Failed to send failure notification: {e}", exc_info=True)
-                    return
+                try:
+                    send_scraper2_failure_notification(
+                        message.id,
+                        "symbol_resolution_error",
+                        error_msg,
+                        trade_data,
+                        trading_mode_2
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to send failure notification: {e}", exc_info=True)
+                return
             
             order_result = self.order_executor_2.execute_order(trade_data, option_symbol)
             
