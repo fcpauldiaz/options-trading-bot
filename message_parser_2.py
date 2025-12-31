@@ -32,7 +32,14 @@ class MessageParser2:
             elif len(parts) == 2:
                 month, day = int(parts[0]), int(parts[1])
                 current_year = datetime.now().year
-                return date(current_year, month, day)
+                today = datetime.now().date()
+                parsed_date = date(current_year, month, day)
+                
+                if parsed_date < today:
+                    parsed_date = date(current_year + 1, month, day)
+                    logger.debug(f"Date {date_str} was in the past with current year, using next year: {parsed_date}")
+                
+                return parsed_date
             else:
                 logger.error(f"Invalid date format: {date_str}")
                 return None
