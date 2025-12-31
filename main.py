@@ -590,6 +590,9 @@ class TradingBot:
                     actual_quantity,
                     price
                 )
+                
+                if self.scraper_2:
+                    self.scraper_2.mark_message_processed(message.id)
             else:
                 error_msg = order_result.get('error', 'Unknown error')
                 logger.error(f"Order failed: {error_msg}")

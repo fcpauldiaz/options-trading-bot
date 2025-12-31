@@ -137,8 +137,6 @@ class DiscordScraper2:
                             message_date = msg.timestamp.date()
                             if message_date == today:
                                 messages.append(msg)
-                                self.processed_message_ids.add(msg.id)
-                                self.save_processed_message_id(msg.id)
                             else:
                                 filtered_count += 1
                                 logger.debug(f"Filtered message {msg.id} from {message_date} (not today)")
@@ -155,6 +153,19 @@ class DiscordScraper2:
         except Exception as e:
             logger.error(f"Error fetching messages: {e}")
             return []
+
+    def mark_message_processed(self, message_id):
+        """
+        Mark a message as processed after successful trade execution.
+        This prevents the message from being processed again.
+        
+        Args:
+            message_id: The Discord message ID to mark as processed
+        """
+        if message_id not in self.processed_message_ids:
+            self.processed_message_ids.add(message_id)
+            self.save_processed_message_id(message_id)
+            logger.debug(f"Marked message {message_id} as processed (scraper 2)")
 
     async def close(self):
         if self.session:
