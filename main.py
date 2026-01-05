@@ -299,6 +299,8 @@ class TradingBot:
                     )
                 except Exception as e:
                     logger.error(f"Failed to send failure notification: {e}", exc_info=True)
+                if self.scraper_2:
+                    self.scraper_2.mark_message_processed(message.id)
                 return
             
             action = trade_data["action"]
@@ -317,6 +319,8 @@ class TradingBot:
                         )
                     except Exception as e:
                         logger.error(f"Failed to send failure notification: {e}", exc_info=True)
+                    if self.scraper_2:
+                        self.scraper_2.mark_message_processed(message.id)
                     return
                 
                 size_indicator = trade_data["size_indicator"]
@@ -336,6 +340,8 @@ class TradingBot:
                             )
                         except Exception as e:
                             logger.error(f"Failed to send failure notification: {e}", exc_info=True)
+                        if self.scraper_2:
+                            self.scraper_2.mark_message_processed(message.id)
                         return
                 
                 option_data = self.option_resolver_2.get_option_price(
@@ -357,6 +363,8 @@ class TradingBot:
                         )
                     except Exception as e:
                         logger.error(f"Failed to send failure notification: {e}", exc_info=True)
+                    if self.scraper_2:
+                        self.scraper_2.mark_message_processed(message.id)
                     return
                 
                 chain_price = None
@@ -371,7 +379,20 @@ class TradingBot:
                 elif ask > 0:
                     chain_price = float(ask)
                 else:
-                    logger.warning(f"Could not determine chain price for {trade_data['ticker']} {trade_data['strike']}{trade_data['option_type']} - bid: {bid}, ask: {ask}, last: {last_price}")
+                    error_msg = f"Could not determine chain price for {trade_data['ticker']} {trade_data['strike']}{trade_data['option_type']} - bid: {bid}, ask: {ask}, last: {last_price}"
+                    logger.warning(error_msg)
+                    try:
+                        send_scraper2_failure_notification(
+                            message.id,
+                            "data_error",
+                            error_msg,
+                            trade_data,
+                            trading_mode_2
+                        )
+                    except Exception as e:
+                        logger.error(f"Failed to send failure notification: {e}", exc_info=True)
+                    if self.scraper_2:
+                        self.scraper_2.mark_message_processed(message.id)
                     return
                 
                 dollar_amount = self.size_calculator.get_dollar_amount(size_indicator, daily_pnl)
@@ -388,6 +409,8 @@ class TradingBot:
                         )
                     except Exception as e:
                         logger.error(f"Failed to send failure notification: {e}", exc_info=True)
+                    if self.scraper_2:
+                        self.scraper_2.mark_message_processed(message.id)
                     return
                 
                 contracts = self.size_calculator.calculate_contracts(dollar_amount, chain_price)
@@ -404,6 +427,8 @@ class TradingBot:
                         )
                     except Exception as e:
                         logger.error(f"Failed to send failure notification: {e}", exc_info=True)
+                    if self.scraper_2:
+                        self.scraper_2.mark_message_processed(message.id)
                     return
                 
                 trade_data["contracts"] = contracts
@@ -429,6 +454,8 @@ class TradingBot:
                         )
                     except Exception as e:
                         logger.error(f"Failed to send failure notification: {e}", exc_info=True)
+                    if self.scraper_2:
+                        self.scraper_2.mark_message_processed(message.id)
                     return
                 
                 logger.info(f"Parsed trade (scraper 2): {trade_data['action']} {trade_data['contracts']} {trade_data['ticker']} {trade_data['strike']}{trade_data['option_type']} exp {trade_data['expiration_date']} [${dollar_amount:.2f}, {size_indicator}]")
@@ -453,6 +480,8 @@ class TradingBot:
                         )
                     except Exception as e:
                         logger.error(f"Failed to send failure notification: {e}", exc_info=True)
+                    if self.scraper_2:
+                        self.scraper_2.mark_message_processed(message.id)
                     return
                 
                 if trade_data.get("all_out"):
@@ -462,7 +491,20 @@ class TradingBot:
                     numerator, denominator = trade_data["fraction"]
                     sold_quantity = int(position * numerator / denominator)
                     if sold_quantity <= 0:
-                        logger.warning(f"Fraction calculation resulted in 0 or negative quantity: {numerator}/{denominator} of {position}")
+                        error_msg = f"Fraction calculation resulted in 0 or negative quantity: {numerator}/{denominator} of {position}"
+                        logger.warning(error_msg)
+                        try:
+                            send_scraper2_failure_notification(
+                                message.id,
+                                "calculation_error",
+                                error_msg,
+                                trade_data,
+                                trading_mode_2
+                            )
+                        except Exception as e:
+                            logger.error(f"Failed to send failure notification: {e}", exc_info=True)
+                        if self.scraper_2:
+                            self.scraper_2.mark_message_processed(message.id)
                         return
                     remaining = position - sold_quantity
                     trade_data["contracts"] = remaining
@@ -480,6 +522,8 @@ class TradingBot:
                         )
                     except Exception as e:
                         logger.error(f"Failed to send failure notification: {e}", exc_info=True)
+                    if self.scraper_2:
+                        self.scraper_2.mark_message_processed(message.id)
                     return
                 
                 option_symbol = self.option_resolver_2.resolve_option_symbol_with_expiration(
@@ -502,6 +546,8 @@ class TradingBot:
                         )
                     except Exception as e:
                         logger.error(f"Failed to send failure notification: {e}", exc_info=True)
+                    if self.scraper_2:
+                        self.scraper_2.mark_message_processed(message.id)
                     return
                 
                 if "price" not in trade_data:
@@ -549,6 +595,8 @@ class TradingBot:
                     )
                 except Exception as e:
                     logger.error(f"Failed to send failure notification: {e}", exc_info=True)
+                if self.scraper_2:
+                    self.scraper_2.mark_message_processed(message.id)
                 return
             
             if not option_symbol:
@@ -564,6 +612,8 @@ class TradingBot:
                     )
                 except Exception as e:
                     logger.error(f"Failed to send failure notification: {e}", exc_info=True)
+                if self.scraper_2:
+                    self.scraper_2.mark_message_processed(message.id)
                 return
             
             order_result = self.order_executor_2.execute_order(trade_data, option_symbol)
@@ -606,6 +656,8 @@ class TradingBot:
                     )
                 except Exception as e:
                     logger.error(f"Failed to send failure notification: {e}", exc_info=True)
+                if self.scraper_2:
+                    self.scraper_2.mark_message_processed(message.id)
                 
         except Exception as e:
             logger.error(f"Error processing message (scraper 2) {message.id}: {e}", exc_info=True)
@@ -620,6 +672,8 @@ class TradingBot:
                 )
             except Exception as notif_e:
                 logger.error(f"Failed to send failure notification: {notif_e}", exc_info=True)
+            if self.scraper_2:
+                self.scraper_2.mark_message_processed(message.id)
 
     async def shutdown(self):
         logger.info("Shutting down bot...")
