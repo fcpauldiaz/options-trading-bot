@@ -108,10 +108,12 @@ class TradingBot:
                     numerator, denominator = trade_data["fraction"]
                     sold_quantity = int(position * numerator / denominator)
                     if sold_quantity <= 0:
-                        logger.warning(f"Fraction calculation resulted in 0 or negative quantity: {numerator}/{denominator} of {position}")
-                        return
-                    trade_data["contracts"] = sold_quantity
-                    logger.info(f"Fraction detected ({numerator}/{denominator}): Position {position}, selling {sold_quantity} contracts")
+                        logger.warning(f"Fraction calculation resulted in 0 or negative quantity: {numerator}/{denominator} of {position}. Closing entire position instead.")
+                        trade_data["contracts"] = position
+                        logger.info(f"Closing entire position: {position} contracts")
+                    else:
+                        trade_data["contracts"] = sold_quantity
+                        logger.info(f"Fraction detected ({numerator}/{denominator}): Position {position}, selling {sold_quantity} contracts")
                 else:
                     logger.warning(f"Fraction detected but no open position for {trade_data['ticker']} {trade_data['strike']}{trade_data['option_type']}")
                     return
@@ -326,15 +328,16 @@ class TradingBot:
                 size_indicator = trade_data["size_indicator"]
                 daily_pnl = None
                 
-                if size_indicator == "LOTTO":
+                if size_indicator == "LOTTO" or size_indicator == "ROLLUP":
                     daily_pnl = self.db_client.get_daily_pnl()
                     if daily_pnl <= 0:
-                        logger.warning(f"LOTTO trade rejected: Daily P&L is ${daily_pnl:.2f} (must be positive)")
+                        error_msg = f"{size_indicator} trade rejected: Daily P&L is ${daily_pnl:.2f} (must be positive)"
+                        logger.warning(error_msg)
                         try:
                             send_scraper2_failure_notification(
                                 message.id,
                                 "validation_error",
-                                f"LOTTO trade rejected: Daily P&L is ${daily_pnl:.2f} (must be positive)",
+                                error_msg,
                                 trade_data,
                                 trading_mode_2
                             )
@@ -491,24 +494,13 @@ class TradingBot:
                     numerator, denominator = trade_data["fraction"]
                     sold_quantity = int(position * numerator / denominator)
                     if sold_quantity <= 0:
-                        error_msg = f"Fraction calculation resulted in 0 or negative quantity: {numerator}/{denominator} of {position}"
-                        logger.warning(error_msg)
-                        try:
-                            send_scraper2_failure_notification(
-                                message.id,
-                                "calculation_error",
-                                error_msg,
-                                trade_data,
-                                trading_mode_2
-                            )
-                        except Exception as e:
-                            logger.error(f"Failed to send failure notification: {e}", exc_info=True)
-                        if self.scraper_2:
-                            self.scraper_2.mark_message_processed(message.id)
-                        return
-                    remaining = position - sold_quantity
-                    trade_data["contracts"] = remaining
-                    logger.info(f"Fraction detected ({numerator}/{denominator}): Position {position}, selling {sold_quantity}, remaining {remaining} contracts")
+                        logger.warning(f"Fraction calculation resulted in 0 or negative quantity: {numerator}/{denominator} of {position}. Closing entire position instead.")
+                        trade_data["contracts"] = position
+                        logger.info(f"Closing entire position: {position} contracts")
+                    else:
+                        remaining = position - sold_quantity
+                        trade_data["contracts"] = remaining
+                        logger.info(f"Fraction detected ({numerator}/{denominator}): Position {position}, selling {sold_quantity}, remaining {remaining} contracts")
                 else:
                     error_msg = "SOLD order format not recognized"
                     logger.warning(error_msg)

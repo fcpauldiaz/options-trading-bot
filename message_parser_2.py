@@ -6,7 +6,7 @@ logger = logging.getLogger(__name__)
 
 class MessageParser2:
     def __init__(self):
-        self.size_indicators = ["LOTTO", "SMALL", "GRADE B", "GRADE A"]
+        self.size_indicators = ["LOTTO", "SMALL", "GRADE B", "GRADE A", "ROLLUP"]
         
         self.bought_pattern = re.compile(
             r'#ALERT\s+BOUGHT\s+([A-Z]+)\s+(\d+\.?\d*)([CP])\s+(\d{1,2}/\d{1,2}(?:/\d{4})?)\s+\$?([\d.]+)\s+\[([^\]]+)\]',

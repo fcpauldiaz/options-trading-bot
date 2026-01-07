@@ -6,9 +6,9 @@ logger = logging.getLogger(__name__)
 class SizeCalculator:
     SIZE_AMOUNTS = {
         "LOTTO": 300,
-        "SMALL": 800,
-        "GRADE B": 1000,
-        "GRADE A": 2000
+        "SMALL": 1000,
+        "GRADE B": 1500,
+        "GRADE A": 2500
     }
     
     def __init__(self, db_client=None):
@@ -19,6 +19,8 @@ class SizeCalculator:
         
         if size_upper == "LOTTO":
             return self.get_lotto_size(daily_pnl)
+        elif size_upper == "ROLLUP":
+            return self.get_rollup_size(daily_pnl)
         elif size_upper in self.SIZE_AMOUNTS:
             return self.SIZE_AMOUNTS[size_upper]
         else:
@@ -42,6 +44,24 @@ class SizeCalculator:
         
         logger.info(f"LOTTO size calculated: ${lotto_amount:.2f} based on daily P&L of ${daily_pnl:.2f}")
         return lotto_amount
+    
+    def get_rollup_size(self, daily_pnl):
+        if daily_pnl is None or daily_pnl <= 0:
+            logger.warning("ROLLUP trade rejected: No daily gains or P&L unavailable")
+            return None
+        
+        min_size = 300
+        max_size = 750
+        
+        rollup_amount = daily_pnl * 0.30
+        
+        if rollup_amount < min_size:
+            rollup_amount = min_size
+        elif rollup_amount > max_size:
+            rollup_amount = max_size
+        
+        logger.info(f"ROLLUP size calculated: ${rollup_amount:.2f} based on daily P&L of ${daily_pnl:.2f}")
+        return rollup_amount
     
     def calculate_contracts(self, dollar_amount, option_price):
         if dollar_amount is None or dollar_amount <= 0:
