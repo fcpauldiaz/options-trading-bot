@@ -120,6 +120,12 @@ class TradingBot:
             
             logger.info(f"Parsed trade: {trade_data['action']} {trade_data['contracts']} {trade_data['ticker']} {trade_data['strike']}{trade_data['option_type']}")
             
+            if trade_data["action"] == "BOUGHT":
+                max_contracts = 10
+                if trade_data["contracts"] > max_contracts:
+                    logger.warning(f"Requested contracts ({trade_data['contracts']}) exceeds maximum ({max_contracts}). Capping to {max_contracts} contracts.")
+                    trade_data["contracts"] = max_contracts
+            
             option_symbol = None
             if trade_data["action"] == "BOUGHT" and "price" in trade_data:
                 message_price = trade_data["price"]
@@ -433,6 +439,33 @@ class TradingBot:
                     if self.scraper_2:
                         self.scraper_2.mark_message_processed(message.id)
                     return
+                
+                max_contracts = 10
+                if contracts > max_contracts:
+                    logger.warning(f"Calculated contracts ({contracts}) exceeds maximum ({max_contracts}). Capping to {max_contracts} contracts.")
+                    contracts = max_contracts
+                
+                alert_price = trade_data.get("price")
+                if alert_price is not None:
+                    price_diff = abs(alert_price - chain_price)
+                    if price_diff > 0.15:
+                        error_msg = f"Price validation failed: Alert price ${alert_price:.2f} differs from chain price ${chain_price:.2f} by ${price_diff:.2f} (max allowed: $0.15). Order rejected."
+                        logger.warning(error_msg)
+                        try:
+                            send_scraper2_failure_notification(
+                                message.id,
+                                "price_validation_error",
+                                error_msg,
+                                trade_data,
+                                trading_mode_2
+                            )
+                        except Exception as e:
+                            logger.error(f"Failed to send failure notification: {e}", exc_info=True)
+                        if self.scraper_2:
+                            self.scraper_2.mark_message_processed(message.id)
+                        return
+                    else:
+                        logger.info(f"Price validation passed: Alert price ${alert_price:.2f} vs chain price ${chain_price:.2f} (diff: ${price_diff:.2f})")
                 
                 trade_data["contracts"] = contracts
                 trade_data["price"] = chain_price
