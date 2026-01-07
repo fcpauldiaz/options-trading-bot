@@ -451,6 +451,51 @@ class TradingBot:
                     if price_diff > 0.15:
                         error_msg = f"Price validation failed: Alert price ${alert_price:.2f} differs from chain price ${chain_price:.2f} by ${price_diff:.2f} (max allowed: $0.15). Order rejected."
                         logger.warning(error_msg)
+                        
+                        logger.warning(f"Chain data for {trade_data['ticker']} {trade_data['strike']}{trade_data['option_type']} (exp: {trade_data.get('expiration_date')}):")
+                        logger.warning(f"  Option Symbol: {option_data.get('symbol', 'N/A')}")
+                        logger.warning(f"  Bid: ${option_data.get('bid', 0) or 0:.2f}")
+                        logger.warning(f"  Ask: ${option_data.get('ask', 0) or 0:.2f}")
+                        logger.warning(f"  Last: ${option_data.get('last', 0) or 0:.2f}")
+                        logger.warning(f"  Volume: {option_data.get('volume', 'N/A')}")
+                        logger.warning(f"  Open Interest: {option_data.get('open_interest', 'N/A')}")
+                        logger.warning(f"  Strike: ${option_data.get('strike', 'N/A')}")
+                        logger.warning(f"  Expiration: {option_data.get('expiration_date', 'N/A')}")
+                        logger.warning(f"  Calculated Chain Price: ${chain_price:.2f}")
+                        logger.warning(f"  Alert Price: ${alert_price:.2f}")
+                        logger.warning(f"  Price Difference: ${price_diff:.2f}")
+                        
+                        try:
+                            expiration_date = trade_data.get("expiration_date")
+                            if expiration_date:
+                                chain = self.option_resolver_2._get_option_chain(
+                                    trade_data["ticker"],
+                                    expiration_date,
+                                    use_cache=False
+                                )
+                                if chain:
+                                    target_strike = trade_data["strike"]
+                                    option_type_str = "call" if trade_data["option_type"].upper() == "C" else "put"
+                                    nearby_options = []
+                                    for opt in chain:
+                                        opt_strike = float(opt.get("strike", 0))
+                                        opt_type = opt.get("option_type", "").lower()
+                                        if opt_type == option_type_str and abs(opt_strike - target_strike) <= 10:
+                                            nearby_options.append({
+                                                "strike": opt_strike,
+                                                "bid": opt.get("bid", 0) or 0,
+                                                "ask": opt.get("ask", 0) or 0,
+                                                "last": opt.get("last", 0) or 0,
+                                                "symbol": opt.get("symbol", "N/A")
+                                            })
+                                    
+                                    if nearby_options:
+                                        logger.warning(f"  Nearby {option_type_str.upper()} options (within ±10 strikes):")
+                                        for opt in sorted(nearby_options, key=lambda x: abs(x["strike"] - target_strike))[:5]:
+                                            logger.warning(f"    Strike ${opt['strike']:.0f}: Bid=${opt['bid']:.2f}, Ask=${opt['ask']:.2f}, Last=${opt['last']:.2f}, Symbol={opt['symbol']}")
+                        except Exception as e:
+                            logger.warning(f"  Could not fetch nearby options for debugging: {e}")
+                        
                         try:
                             send_scraper2_failure_notification(
                                 message.id,
