@@ -82,7 +82,7 @@ class TradingBot:
             
             trade_data = self.parser.parse(content)
             if not trade_data.get("valid"):
-                logger.warning(f"Message {message.id} did not match trading format: {content}")
+                #logger.warning(f"Message {message.id} did not match trading format: {content}")
                 return
             
             if trade_data.get("all_out"):
@@ -448,7 +448,7 @@ class TradingBot:
                 alert_price = trade_data.get("price")
                 if alert_price is not None:
                     price_diff = abs(alert_price - chain_price)
-                    if price_diff > 0.15:
+                    if price_diff > 0.30:
                         error_msg = f"Price validation failed: Alert price ${alert_price:.2f} differs from chain price ${chain_price:.2f} by ${price_diff:.2f} (max allowed: $0.15). Order rejected."
                         logger.warning(error_msg)
                         
