@@ -291,7 +291,7 @@ class TradingBot:
             
             trade_data = self.parser_2.parse(content)
             if not trade_data.get("valid"):
-                logger.warning(f"Message {message.id} did not match trading format: {content}")
+                #logger.warning(f"Message {message.id} did not match trading format: {content}")
                 return
             
             if trade_data.get("error"):
