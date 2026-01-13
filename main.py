@@ -74,6 +74,30 @@ class TradingBot:
         if self.scraper_2:
             await self.scraper_2.connect()
         await asyncio.sleep(2)
+    
+    def _calculate_chain_price(self, option_data, use_bid_fallback=False):
+        last_price = option_data.get("last")
+        bid = option_data.get("bid", 0) or 0
+        ask = option_data.get("ask", 0) or 0
+        
+        if last_price and last_price > 0:
+            return float(last_price)
+        elif bid > 0 and ask > 0:
+            return (float(bid) + float(ask)) / 2.0
+        elif ask > 0:
+            return float(ask)
+        elif use_bid_fallback and bid > 0:
+            return float(bid)
+        return None
+    
+    def _clear_option_chain_cache(self, option_resolver, ticker, expiration_date):
+        if expiration_date:
+            cache_key = f"{ticker}_{expiration_date}"
+            if cache_key in option_resolver.chain_cache:
+                del option_resolver.chain_cache[cache_key]
+                logger.info(f"Cleared cache entry for {cache_key}")
+                return True
+        return False
         
     async def process_message(self, message):
         try:
@@ -144,18 +168,11 @@ class TradingBot:
                     logger.error(f"Could not extract option symbol from price data for {trade_data['ticker']} {trade_data['strike']}{trade_data['option_type']}")
                     return
                 
-                chain_price = None
-                last_price = option_data.get("last")
-                bid = option_data.get("bid", 0) or 0
-                ask = option_data.get("ask", 0) or 0
-                
-                if last_price and last_price > 0:
-                    chain_price = float(last_price)
-                elif bid > 0 and ask > 0:
-                    chain_price = (float(bid) + float(ask)) / 2.0
-                elif ask > 0:
-                    chain_price = float(ask)
-                else:
+                chain_price = self._calculate_chain_price(option_data)
+                if chain_price is None:
+                    bid = option_data.get("bid", 0) or 0
+                    ask = option_data.get("ask", 0) or 0
+                    last_price = option_data.get("last")
                     logger.warning(f"Could not determine chain price for {trade_data['ticker']} {trade_data['strike']}{trade_data['option_type']} - bid: {bid}, ask: {ask}, last: {last_price}")
                     return
                 
@@ -166,9 +183,43 @@ class TradingBot:
                     else:
                         logger.warning(
                             f"Price validation failed: Message price ${message_price:.2f} differs from chain price ${chain_price:.2f} "
-                            f"by ${price_diff:.2f} (max allowed: $0.05). Order rejected."
+                            f"by ${price_diff:.2f} (max allowed: $0.05). Retrying with fresh chain data..."
                         )
-                        return
+                        
+                        exp_date = self.option_resolver._find_closest_expiration(trade_data["ticker"])
+                        self._clear_option_chain_cache(self.option_resolver, trade_data["ticker"], exp_date)
+                        
+                        retry_option_data = self.option_resolver.get_option_price(
+                            trade_data["ticker"],
+                            trade_data["strike"],
+                            trade_data["option_type"]
+                        )
+                        
+                        if retry_option_data:
+                            retry_chain_price = self._calculate_chain_price(retry_option_data)
+                            if retry_chain_price is not None:
+                                retry_price_diff = abs(message_price - retry_chain_price)
+                                if retry_price_diff > 0.05:
+                                    logger.warning(
+                                        f"Price validation failed after retry: Message price ${message_price:.2f} differs from chain price ${retry_chain_price:.2f} "
+                                        f"by ${retry_price_diff:.2f} (max allowed: $0.05). Order rejected."
+                                    )
+                                    return
+                                else:
+                                    logger.info(f"Price validation passed after retry: Message price ${message_price:.2f} vs chain price ${retry_chain_price:.2f} (diff: ${retry_price_diff:.2f})")
+                                    chain_price = retry_chain_price
+                                    option_data = retry_option_data
+                                    option_symbol = retry_option_data.get("symbol")
+                            else:
+                                logger.warning(
+                                    f"Price validation failed: Could not determine chain price after retry. Order rejected."
+                                )
+                                return
+                        else:
+                            logger.warning(
+                                f"Price validation failed: Could not get option price data after retry. Order rejected."
+                            )
+                            return
                 else:
                     logger.info(f"Price validation passed: Message price ${message_price:.2f} vs chain price ${chain_price:.2f} (diff: ${price_diff:.2f})")
             else:
@@ -191,24 +242,14 @@ class TradingBot:
                     )
                     
                     if option_data:
-                        last_price = option_data.get("last")
-                        bid = option_data.get("bid", 0) or 0
-                        ask = option_data.get("ask", 0) or 0
-                        
-                        chain_price = None
-                        if last_price and float(last_price) > 0:
-                            chain_price = float(last_price)
-                        elif bid > 0 and ask > 0:
-                            chain_price = (float(bid) + float(ask)) / 2.0
-                        elif ask > 0:
-                            chain_price = float(ask)
-                        elif bid > 0:
-                            chain_price = float(bid)
-                        
+                        chain_price = self._calculate_chain_price(option_data, use_bid_fallback=True)
                         if chain_price:
                             trade_data["price"] = chain_price
                             logger.info(f"Fetched price for SOLD trade: ${chain_price:.2f}")
                         else:
+                            bid = option_data.get("bid", 0) or 0
+                            ask = option_data.get("ask", 0) or 0
+                            last_price = option_data.get("last")
                             logger.warning(f"Could not determine price for SOLD trade {trade_data['ticker']} {trade_data['strike']}{trade_data['option_type']} - bid: {bid}, ask: {ask}, last: {last_price}")
                     else:
                         logger.warning(f"Could not fetch option data for SOLD trade {trade_data['ticker']} {trade_data['strike']}{trade_data['option_type']}")
@@ -376,18 +417,11 @@ class TradingBot:
                         self.scraper_2.mark_message_processed(message.id)
                     return
                 
-                chain_price = None
-                last_price = option_data.get("last")
-                bid = option_data.get("bid", 0) or 0
-                ask = option_data.get("ask", 0) or 0
-                
-                if last_price and last_price > 0:
-                    chain_price = float(last_price)
-                elif bid > 0 and ask > 0:
-                    chain_price = (float(bid) + float(ask)) / 2.0
-                elif ask > 0:
-                    chain_price = float(ask)
-                else:
+                chain_price = self._calculate_chain_price(option_data)
+                if chain_price is None:
+                    bid = option_data.get("bid", 0) or 0
+                    ask = option_data.get("ask", 0) or 0
+                    last_price = option_data.get("last")
                     error_msg = f"Could not determine chain price for {trade_data['ticker']} {trade_data['strike']}{trade_data['option_type']} - bid: {bid}, ask: {ask}, last: {last_price}"
                     logger.warning(error_msg)
                     try:
@@ -449,66 +483,121 @@ class TradingBot:
                 if alert_price is not None:
                     price_diff = abs(alert_price - chain_price)
                     if price_diff > 0.30:
-                        error_msg = f"Price validation failed: Alert price ${alert_price:.2f} differs from chain price ${chain_price:.2f} by ${price_diff:.2f} (max allowed: $0.15). Order rejected."
-                        logger.warning(error_msg)
+                        logger.warning(
+                            f"Price validation failed: Alert price ${alert_price:.2f} differs from chain price ${chain_price:.2f} "
+                            f"by ${price_diff:.2f} (max allowed: $0.30). Retrying with fresh chain data..."
+                        )
                         
-                        logger.warning(f"Chain data for {trade_data['ticker']} {trade_data['strike']}{trade_data['option_type']} (exp: {trade_data.get('expiration_date')}):")
-                        logger.warning(f"  Option Symbol: {option_data.get('symbol', 'N/A')}")
-                        logger.warning(f"  Bid: ${option_data.get('bid', 0) or 0:.2f}")
-                        logger.warning(f"  Ask: ${option_data.get('ask', 0) or 0:.2f}")
-                        logger.warning(f"  Last: ${option_data.get('last', 0) or 0:.2f}")
-                        logger.warning(f"  Volume: {option_data.get('volume', 'N/A')}")
-                        logger.warning(f"  Open Interest: {option_data.get('open_interest', 'N/A')}")
-                        logger.warning(f"  Strike: ${option_data.get('strike', 'N/A')}")
-                        logger.warning(f"  Expiration: {option_data.get('expiration_date', 'N/A')}")
-                        logger.warning(f"  Calculated Chain Price: ${chain_price:.2f}")
-                        logger.warning(f"  Alert Price: ${alert_price:.2f}")
-                        logger.warning(f"  Price Difference: ${price_diff:.2f}")
+                        expiration_date = trade_data.get("expiration_date")
+                        self._clear_option_chain_cache(self.option_resolver_2, trade_data["ticker"], expiration_date)
                         
-                        try:
-                            expiration_date = trade_data.get("expiration_date")
-                            if expiration_date:
-                                chain = self.option_resolver_2._get_option_chain(
-                                    trade_data["ticker"],
-                                    expiration_date,
-                                    use_cache=False
-                                )
-                                if chain:
-                                    target_strike = trade_data["strike"]
-                                    option_type_str = "call" if trade_data["option_type"].upper() == "C" else "put"
-                                    nearby_options = []
-                                    for opt in chain:
-                                        opt_strike = float(opt.get("strike", 0))
-                                        opt_type = opt.get("option_type", "").lower()
-                                        if opt_type == option_type_str and abs(opt_strike - target_strike) <= 10:
-                                            nearby_options.append({
-                                                "strike": opt_strike,
-                                                "bid": opt.get("bid", 0) or 0,
-                                                "ask": opt.get("ask", 0) or 0,
-                                                "last": opt.get("last", 0) or 0,
-                                                "symbol": opt.get("symbol", "N/A")
-                                            })
+                        retry_option_data = self.option_resolver_2.get_option_price_with_expiration(
+                            trade_data["ticker"],
+                            trade_data["strike"],
+                            trade_data["option_type"],
+                            expiration_date
+                        )
+                        
+                        if retry_option_data:
+                            retry_chain_price = self._calculate_chain_price(retry_option_data)
+                            if retry_chain_price is not None:
+                                retry_price_diff = abs(alert_price - retry_chain_price)
+                                if retry_price_diff > 0.30:
+                                    error_msg = f"Price validation failed after retry: Alert price ${alert_price:.2f} differs from chain price ${retry_chain_price:.2f} by ${retry_price_diff:.2f} (max allowed: $0.30). Order rejected."
+                                    logger.warning(error_msg)
                                     
-                                    if nearby_options:
-                                        logger.warning(f"  Nearby {option_type_str.upper()} options (within ±10 strikes):")
-                                        for opt in sorted(nearby_options, key=lambda x: abs(x["strike"] - target_strike))[:5]:
-                                            logger.warning(f"    Strike ${opt['strike']:.0f}: Bid=${opt['bid']:.2f}, Ask=${opt['ask']:.2f}, Last=${opt['last']:.2f}, Symbol={opt['symbol']}")
-                        except Exception as e:
-                            logger.warning(f"  Could not fetch nearby options for debugging: {e}")
-                        
-                        try:
-                            send_scraper2_failure_notification(
-                                message.id,
-                                "price_validation_error",
-                                error_msg,
-                                trade_data,
-                                trading_mode_2
-                            )
-                        except Exception as e:
-                            logger.error(f"Failed to send failure notification: {e}", exc_info=True)
-                        if self.scraper_2:
-                            self.scraper_2.mark_message_processed(message.id)
-                        return
+                                    logger.warning(f"Chain data for {trade_data['ticker']} {trade_data['strike']}{trade_data['option_type']} (exp: {trade_data.get('expiration_date')}):")
+                                    logger.warning(f"  Option Symbol: {retry_option_data.get('symbol', 'N/A')}")
+                                    logger.warning(f"  Bid: ${retry_option_data.get('bid', 0) or 0:.2f}")
+                                    logger.warning(f"  Ask: ${retry_option_data.get('ask', 0) or 0:.2f}")
+                                    logger.warning(f"  Last: ${retry_option_data.get('last', 0) or 0:.2f}")
+                                    logger.warning(f"  Volume: {retry_option_data.get('volume', 'N/A')}")
+                                    logger.warning(f"  Open Interest: {retry_option_data.get('open_interest', 'N/A')}")
+                                    logger.warning(f"  Strike: {retry_option_data.get('strike', 'N/A')}")
+                                    logger.warning(f"  Expiration: {retry_option_data.get('expiration_date', 'N/A')}")
+                                    logger.warning(f"  Calculated Chain Price: ${retry_chain_price:.2f}")
+                                    logger.warning(f"  Alert Price: ${alert_price:.2f}")
+                                    logger.warning(f"  Price Difference: ${retry_price_diff:.2f}")
+                                    
+                                    try:
+                                        if expiration_date:
+                                            chain = self.option_resolver_2._get_option_chain(
+                                                trade_data["ticker"],
+                                                expiration_date,
+                                                use_cache=False
+                                            )
+                                            if chain:
+                                                target_strike = trade_data["strike"]
+                                                option_type_str = "call" if trade_data["option_type"].upper() == "C" else "put"
+                                                nearby_options = []
+                                                for opt in chain:
+                                                    opt_strike = float(opt.get("strike", 0))
+                                                    opt_type = opt.get("option_type", "").lower()
+                                                    if opt_type == option_type_str and abs(opt_strike - target_strike) <= 10:
+                                                        nearby_options.append({
+                                                            "strike": opt_strike,
+                                                            "bid": opt.get("bid", 0) or 0,
+                                                            "ask": opt.get("ask", 0) or 0,
+                                                            "last": opt.get("last", 0) or 0,
+                                                            "symbol": opt.get("symbol", "N/A")
+                                                        })
+                                                
+                                                if nearby_options:
+                                                    logger.warning(f"  Nearby {option_type_str.upper()} options (within ±10 strikes):")
+                                                    for opt in sorted(nearby_options, key=lambda x: abs(x["strike"] - target_strike))[:5]:
+                                                        logger.warning(f"    Strike ${opt['strike']:.0f}: Bid=${opt['bid']:.2f}, Ask=${opt['ask']:.2f}, Last=${opt['last']:.2f}, Symbol={opt['symbol']}")
+                                    except Exception as e:
+                                        logger.warning(f"  Could not fetch nearby options for debugging: {e}")
+                                    
+                                    try:
+                                        send_scraper2_failure_notification(
+                                            message.id,
+                                            "price_validation_error",
+                                            error_msg,
+                                            trade_data,
+                                            trading_mode_2
+                                        )
+                                    except Exception as e:
+                                        logger.error(f"Failed to send failure notification: {e}", exc_info=True)
+                                    if self.scraper_2:
+                                        self.scraper_2.mark_message_processed(message.id)
+                                    return
+                                else:
+                                    logger.info(f"Price validation passed after retry: Alert price ${alert_price:.2f} vs chain price ${retry_chain_price:.2f} (diff: ${retry_price_diff:.2f})")
+                                    chain_price = retry_chain_price
+                                    option_data = retry_option_data
+                            else:
+                                error_msg = f"Price validation failed: Could not determine chain price after retry for {trade_data['ticker']} {trade_data['strike']}{trade_data['option_type']}"
+                                logger.warning(error_msg)
+                                try:
+                                    send_scraper2_failure_notification(
+                                        message.id,
+                                        "price_validation_error",
+                                        error_msg,
+                                        trade_data,
+                                        trading_mode_2
+                                    )
+                                except Exception as e:
+                                    logger.error(f"Failed to send failure notification: {e}", exc_info=True)
+                                if self.scraper_2:
+                                    self.scraper_2.mark_message_processed(message.id)
+                                return
+                        else:
+                            error_msg = f"Price validation failed: Could not get option price data after retry for {trade_data['ticker']} {trade_data['strike']}{trade_data['option_type']}"
+                            logger.warning(error_msg)
+                            try:
+                                send_scraper2_failure_notification(
+                                    message.id,
+                                    "price_validation_error",
+                                    error_msg,
+                                    trade_data,
+                                    trading_mode_2
+                                )
+                            except Exception as e:
+                                logger.error(f"Failed to send failure notification: {e}", exc_info=True)
+                            if self.scraper_2:
+                                self.scraper_2.mark_message_processed(message.id)
+                            return
                     else:
                         logger.info(f"Price validation passed: Alert price ${alert_price:.2f} vs chain price ${chain_price:.2f} (diff: ${price_diff:.2f})")
                 
@@ -629,20 +718,7 @@ class TradingBot:
                     )
                     
                     if option_data:
-                        last_price = option_data.get("last")
-                        bid = option_data.get("bid", 0) or 0
-                        ask = option_data.get("ask", 0) or 0
-                        
-                        chain_price = None
-                        if last_price and float(last_price) > 0:
-                            chain_price = float(last_price)
-                        elif bid > 0 and ask > 0:
-                            chain_price = (float(bid) + float(ask)) / 2.0
-                        elif ask > 0:
-                            chain_price = float(ask)
-                        elif bid > 0:
-                            chain_price = float(bid)
-                        
+                        chain_price = self._calculate_chain_price(option_data, use_bid_fallback=True)
                         if chain_price:
                             trade_data["price"] = chain_price
                             logger.info(f"Fetched price for SOLD trade: ${chain_price:.2f}")
