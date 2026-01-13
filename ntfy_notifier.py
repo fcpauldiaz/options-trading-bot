@@ -210,7 +210,7 @@ def send_scraper2_failure_notification(message_id: int, error_type: str, error_m
         title = f"[{mode_display}] Scraper 2 Failure: {error_type}"
         
         message_parts = [
-            f"[{mode_display}] Message ID: {message_id}",
+            f"[{mode_display}]",
             f"Error: {error_message}"
         ]
         
@@ -218,7 +218,13 @@ def send_scraper2_failure_notification(message_id: int, error_type: str, error_m
             ticker = trade_data.get("ticker", "N/A")
             strike = trade_data.get("strike", "N/A")
             option_type = trade_data.get("option_type", "N/A")
-            message_parts.insert(0, f"Trade: {ticker} {strike}{option_type}")
+            expiration_date = trade_data.get("expiration_date")
+            
+            trade_info = f"Trade: {ticker} {strike}{option_type}"
+            if expiration_date:
+                exp_str = expiration_date.strftime("%Y-%m-%d") if hasattr(expiration_date, 'strftime') else str(expiration_date)
+                trade_info += f" exp {exp_str}"
+            message_parts.insert(0, trade_info)
         
         message = "\n".join(message_parts)
         
