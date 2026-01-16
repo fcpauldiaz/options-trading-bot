@@ -22,8 +22,11 @@ from market_hours import is_market_open
 
 os.makedirs('logs', exist_ok=True)
 
+log_level_str = os.getenv("LOG_LEVEL", "INFO").upper()
+log_level = getattr(logging, log_level_str, logging.INFO)
+
 logging.basicConfig(
-    level=logging.INFO,
+    level=log_level,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
         logging.FileHandler('logs/trading_bot.log'),
@@ -32,6 +35,7 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger(__name__)
+logger.info(f"Logging level set to: {log_level_str} (numeric: {log_level})")
 
 class DebugMessage:
     def __init__(self, content):
@@ -103,6 +107,10 @@ class TradingBot:
         try:
             content = message.content
             logger.info(f"Processing message {message.id}: {content[:100]}")
+            
+            if "SWING" in content.upper():
+                logger.info(f"Skipping SWING trade message {message.id}")
+                return
             
             trade_data = self.parser.parse(content)
             if not trade_data.get("valid"):
@@ -323,6 +331,12 @@ class TradingBot:
         try:
             content = message.content
             logger.info(f"Processing message (scraper 2) {message.id}: {content[:100]}")
+            
+            if "SWING" in content.upper():
+                logger.info(f"Skipping SWING trade message {message.id}")
+                if self.scraper_2:
+                    self.scraper_2.mark_message_processed(message.id)
+                return
             
             if not self.parser_2:
                 logger.error("Parser 2 not initialized")
