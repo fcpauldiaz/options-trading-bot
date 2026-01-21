@@ -22,6 +22,16 @@ class MessageParser2:
             r'#ALERT\s+SOLD\s+(?:ALL\s+OUT|all\s+out)\s+([A-Z]+)\s+(\d+\.?\d*)([CP])\s+(\d{1,2}/\d{1,2}(?:/\d{4})?)\s+\$?([\d.]+)',
             re.IGNORECASE
         )
+        
+        self.spacemonkey_bought_pattern = re.compile(
+            r'\*{0,2}BOUGHT\*{0,2}\s+([A-Z]+)\s+(\d+\.?\d*)([CP])\s+\$?([\d.]+)\s+\[([^\]]+)\]',
+            re.IGNORECASE
+        )
+        
+        self.spacemonkey_bought_title_pattern = re.compile(
+            r'([A-Z]+)\s+(\d+\.?\d*)([CP])\s+\$?([\d.]+)\s+\[([^\]]+)\]',
+            re.IGNORECASE
+        )
 
     def _parse_date(self, date_str):
         try:
@@ -140,5 +150,61 @@ class MessageParser2:
             }
         
         logger.debug(f"Message did not match any pattern: {message_content[:100]}")
+        return {"valid": False}
+    
+    def parse_spacemonkey(self, message_content, embed_titles=None):
+        message_content = message_content.strip()
+        
+        match = self.spacemonkey_bought_pattern.search(message_content)
+        if match:
+            ticker = match.group(1).upper()
+            strike = float(match.group(2))
+            option_type = match.group(3).upper()
+            price = float(match.group(4))
+            size_indicator_raw = match.group(5).strip()
+            
+            size_indicator = self._normalize_size_indicator(size_indicator_raw)
+            if not size_indicator:
+                logger.warning(f"Invalid or missing size indicator: {size_indicator_raw}. Must be one of: {', '.join(self.size_indicators)}")
+                return {"valid": False, "error": f"Invalid size indicator: {size_indicator_raw}"}
+            
+            return {
+                "action": "BOUGHT",
+                "ticker": ticker,
+                "strike": strike,
+                "option_type": option_type,
+                "expiration_date": None,
+                "price": price,
+                "size_indicator": size_indicator,
+                "valid": True
+            }
+        
+        if embed_titles:
+            for title in embed_titles:
+                match = self.spacemonkey_bought_title_pattern.search(title)
+                if match:
+                    ticker = match.group(1).upper()
+                    strike = float(match.group(2))
+                    option_type = match.group(3).upper()
+                    price = float(match.group(4))
+                    size_indicator_raw = match.group(5).strip()
+                    
+                    size_indicator = self._normalize_size_indicator(size_indicator_raw)
+                    if not size_indicator:
+                        logger.warning(f"Invalid or missing size indicator: {size_indicator_raw}. Must be one of: {', '.join(self.size_indicators)}")
+                        continue
+                    
+                    return {
+                        "action": "BOUGHT",
+                        "ticker": ticker,
+                        "strike": strike,
+                        "option_type": option_type,
+                        "expiration_date": None,
+                        "price": price,
+                        "size_indicator": size_indicator,
+                        "valid": True
+                    }
+        
+        logger.debug(f"Spacemonkey message did not match pattern: {message_content[:100]}")
         return {"valid": False}
 

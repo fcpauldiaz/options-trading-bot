@@ -13,8 +13,8 @@ class Message:
         main_content = message_data.get("content", "")
         
         embed_descriptions = []
-        embeds = message_data.get("embeds", [])
-        for embed in embeds:
+        self.embeds = message_data.get("embeds", [])
+        for embed in self.embeds:
             if isinstance(embed, dict) and "description" in embed:
                 embed_descriptions.append(embed["description"])
         
@@ -32,6 +32,23 @@ class Message:
                 self.timestamp = None
         else:
             self.timestamp = None
+    
+    def is_spacemonkey(self):
+        for embed in self.embeds:
+            if isinstance(embed, dict):
+                footer = embed.get("footer", {})
+                if isinstance(footer, dict):
+                    footer_text = footer.get("text", "")
+                    if footer_text == "spacemonkey":
+                        return True
+        return False
+    
+    def get_embed_titles(self):
+        titles = []
+        for embed in self.embeds:
+            if isinstance(embed, dict) and "title" in embed:
+                titles.append(embed["title"])
+        return titles
 
 class DiscordScraper:
     def __init__(self, processed_ids_file="processed_messages.txt"):
@@ -129,6 +146,7 @@ class DiscordScraper:
                 messages = []
                 today = datetime.now().date()
                 filtered_count = 0
+                spacemonkey_filtered_count = 0
                 
                 for msg_data in messages_data:
                     msg = Message(msg_data)
@@ -136,9 +154,13 @@ class DiscordScraper:
                         if msg.timestamp:
                             message_date = msg.timestamp.date()
                             if message_date == today:
-                                messages.append(msg)
-                                self.processed_message_ids.add(msg.id)
-                                self.save_processed_message_id(msg.id)
+                                if msg.is_spacemonkey():
+                                    messages.append(msg)
+                                    self.processed_message_ids.add(msg.id)
+                                    self.save_processed_message_id(msg.id)
+                                else:
+                                    spacemonkey_filtered_count += 1
+                                    logger.debug(f"Filtered message {msg.id} (not spacemonkey)")
                             else:
                                 filtered_count += 1
                                 logger.debug(f"Filtered message {msg.id} from {message_date} (not today)")
@@ -147,9 +169,11 @@ class DiscordScraper:
                 
                 if filtered_count > 0:
                     logger.debug(f"Filtered {filtered_count} messages from previous days")
+                if spacemonkey_filtered_count > 0:
+                    logger.debug(f"Filtered {spacemonkey_filtered_count} messages (not spacemonkey)")
                 
                 if messages:
-                    logger.info(f"Found {len(messages)} new messages from today")
+                    logger.info(f"Found {len(messages)} new spacemonkey messages from today")
                 
                 return messages
         except Exception as e:

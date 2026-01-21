@@ -48,14 +48,14 @@ class TradingBot:
         self.scraper = DiscordScraper()
         self.scraper_2 = DiscordScraper2() if DISCORD_CHANNEL_ID_2 else None
         self.parser = MessageParser()
-        self.parser_2 = MessageParser2() if DISCORD_CHANNEL_ID_2 else None
+        self.parser_2 = MessageParser2()
         self.tradier_client = TradierClient()
         self.db_client = DBClient()
         self.option_resolver = OptionResolver(self.tradier_client)
         self.db_logger = DBLogger(self.db_client, self.option_resolver)
         self.position_tracker = PositionTracker(self.db_client)
         self.order_executor = OrderExecutor(self.tradier_client, self.position_tracker)
-        self.size_calculator = SizeCalculator(self.db_client) if DISCORD_CHANNEL_ID_2 else None
+        self.size_calculator = SizeCalculator(self.db_client)
         
         if DISCORD_CHANNEL_ID_2:
             self.tradier_client_2 = TradierClient(TRADING_MODE_CHANNEL_2)
@@ -110,6 +110,11 @@ class TradingBot:
             
             if "SWING" in content.upper():
                 logger.info(f"Skipping SWING trade message {message.id}")
+                return
+            
+            if message.is_spacemonkey():
+                embed_titles = message.get_embed_titles()
+                await self._process_spacemonkey_message(message, content, embed_titles)
                 return
             
             trade_data = self.parser.parse(content)
@@ -292,6 +297,167 @@ class TradingBot:
                 
         except Exception as e:
             logger.error(f"Error processing message {message.id}: {e}", exc_info=True)
+
+    async def _process_spacemonkey_message(self, message, content, embed_titles=None):
+        try:
+            logger.info(f"Processing spacemonkey message {message.id}: {content[:100]}")
+            
+            trade_data = self.parser_2.parse_spacemonkey(content, embed_titles)
+            if not trade_data.get("valid"):
+                logger.warning(f"Spacemonkey message {message.id} did not match format: {content}")
+                return
+            
+            if trade_data.get("error"):
+                error_msg = trade_data.get('error', 'Unknown parsing error')
+                logger.warning(f"Spacemonkey message {message.id} parsing error: {error_msg}")
+                return
+            
+            action = trade_data["action"]
+            option_symbol = None
+            
+            if action == "BOUGHT":
+                if "size_indicator" not in trade_data:
+                    logger.warning(f"BOUGHT order rejected: No size indicator found in spacemonkey message {message.id}")
+                    return
+                
+                size_indicator = trade_data["size_indicator"]
+                daily_pnl = None
+                
+                if size_indicator == "LOTTO" or size_indicator == "ROLLUP":
+                    daily_pnl = self.db_client.get_daily_pnl()
+                    if daily_pnl <= 0:
+                        error_msg = f"{size_indicator} trade rejected: Daily P&L is ${daily_pnl:.2f} (must be positive)"
+                        logger.warning(error_msg)
+                        return
+                
+                option_data = self.option_resolver.get_option_price(
+                    trade_data["ticker"],
+                    trade_data["strike"],
+                    trade_data["option_type"]
+                )
+                
+                if not option_data:
+                    error_msg = f"Could not get option price data for {trade_data['ticker']} {trade_data['strike']}{trade_data['option_type']}"
+                    logger.error(error_msg)
+                    return
+                
+                chain_price = self._calculate_chain_price(option_data)
+                if chain_price is None:
+                    bid = option_data.get("bid", 0) or 0
+                    ask = option_data.get("ask", 0) or 0
+                    last_price = option_data.get("last")
+                    error_msg = f"Could not determine chain price for {trade_data['ticker']} {trade_data['strike']}{trade_data['option_type']} - bid: {bid}, ask: {ask}, last: {last_price}"
+                    logger.warning(error_msg)
+                    return
+                
+                dollar_amount = self.size_calculator.get_dollar_amount(size_indicator, daily_pnl)
+                if dollar_amount is None:
+                    error_msg = f"Could not determine dollar amount for size indicator: {size_indicator}"
+                    logger.error(error_msg)
+                    return
+                
+                contracts = self.size_calculator.calculate_contracts(dollar_amount, chain_price)
+                if contracts <= 0:
+                    error_msg = f"Calculated contracts is 0 or negative for {trade_data['ticker']} {trade_data['strike']}{trade_data['option_type']}"
+                    logger.warning(error_msg)
+                    return
+                
+                max_contracts = 10
+                if contracts > max_contracts:
+                    logger.warning(f"Calculated contracts ({contracts}) exceeds maximum ({max_contracts}). Capping to {max_contracts} contracts.")
+                    contracts = max_contracts
+                
+                alert_price = trade_data.get("price")
+                if alert_price is not None:
+                    price_diff = abs(alert_price - chain_price)
+                    if price_diff > 0.30:
+                        logger.warning(
+                            f"Price validation failed: Alert price ${alert_price:.2f} differs from chain price ${chain_price:.2f} "
+                            f"by ${price_diff:.2f} (max allowed: $0.30). Retrying with fresh chain data..."
+                        )
+                        
+                        exp_date = self.option_resolver._find_closest_expiration(trade_data["ticker"])
+                        self._clear_option_chain_cache(self.option_resolver, trade_data["ticker"], exp_date)
+                        
+                        retry_option_data = self.option_resolver.get_option_price(
+                            trade_data["ticker"],
+                            trade_data["strike"],
+                            trade_data["option_type"]
+                        )
+                        
+                        if retry_option_data:
+                            retry_chain_price = self._calculate_chain_price(retry_option_data)
+                            if retry_chain_price is not None:
+                                retry_price_diff = abs(alert_price - retry_chain_price)
+                                if retry_price_diff > 0.30:
+                                    error_msg = f"Price validation failed after retry: Alert price ${alert_price:.2f} differs from chain price ${retry_chain_price:.2f} by ${retry_price_diff:.2f} (max allowed: $0.30). Order rejected."
+                                    logger.warning(error_msg)
+                                    return
+                                else:
+                                    logger.info(f"Price validation passed after retry: Alert price ${alert_price:.2f} vs chain price ${retry_chain_price:.2f} (diff: ${retry_price_diff:.2f})")
+                                    chain_price = retry_chain_price
+                                    option_data = retry_option_data
+                            else:
+                                error_msg = f"Price validation failed: Could not determine chain price after retry for {trade_data['ticker']} {trade_data['strike']}{trade_data['option_type']}"
+                                logger.warning(error_msg)
+                                return
+                        else:
+                            error_msg = f"Price validation failed: Could not get option price data after retry for {trade_data['ticker']} {trade_data['strike']}{trade_data['option_type']}"
+                            logger.warning(error_msg)
+                            return
+                    else:
+                        logger.info(f"Price validation passed: Alert price ${alert_price:.2f} vs chain price ${chain_price:.2f} (diff: ${price_diff:.2f})")
+                
+                trade_data["contracts"] = contracts
+                trade_data["price"] = chain_price
+                
+                option_symbol = option_data.get("symbol")
+                if not option_symbol:
+                    error_msg = f"Could not extract option symbol for {trade_data['ticker']} {trade_data['strike']}{trade_data['option_type']}"
+                    logger.error(error_msg)
+                    return
+                
+                logger.info(f"Parsed spacemonkey trade: {trade_data['action']} {trade_data['contracts']} {trade_data['ticker']} {trade_data['strike']}{trade_data['option_type']} [${dollar_amount:.2f}, {size_indicator}]")
+            else:
+                logger.warning(f"Spacemonkey message {message.id} has unsupported action: {action}")
+                return
+            
+            if not option_symbol:
+                error_msg = f"Option symbol not resolved for {trade_data.get('ticker', 'unknown')} {trade_data.get('strike', 'unknown')}{trade_data.get('option_type', 'unknown')}"
+                logger.error(error_msg)
+                return
+            
+            order_result = self.order_executor.execute_order(trade_data, option_symbol)
+            
+            if order_result.get("success"):
+                actual_quantity = order_result.get("actual_quantity", trade_data["contracts"])
+                trade_data_for_log = trade_data.copy()
+                if actual_quantity != trade_data["contracts"]:
+                    trade_data_for_log["contracts"] = actual_quantity
+                
+                self.db_logger.log_trade(message.id, trade_data_for_log, option_symbol, order_result)
+                
+                try:
+                    trading_mode = self.tradier_client.get_trading_mode()
+                    send_trade_notification(trade_data_for_log, order_result, trading_mode)
+                except Exception as e:
+                    logger.error(f"Failed to send notification: {e}", exc_info=True)
+                
+                price = trade_data_for_log.get("price")
+                self.position_tracker.update_position(
+                    trade_data["ticker"],
+                    trade_data["strike"],
+                    trade_data["option_type"],
+                    trade_data["action"],
+                    actual_quantity,
+                    price
+                )
+            else:
+                error_msg = order_result.get('error', 'Unknown error')
+                logger.error(f"Order failed: {error_msg}")
+                
+        except Exception as e:
+            logger.error(f"Error processing spacemonkey message {message.id}: {e}", exc_info=True)
 
     async def run(self):
         self.running = True

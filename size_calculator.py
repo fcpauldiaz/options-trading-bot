@@ -33,7 +33,7 @@ class SizeCalculator:
             return None
         
         min_size = 300
-        max_size = 750
+        max_size = 600
         
         lotto_amount = daily_pnl * 0.30
         
