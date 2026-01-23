@@ -368,6 +368,7 @@ class TradingBot:
                     contracts = max_contracts
                 
                 alert_price = trade_data.get("price")
+                use_limit_order = False
                 if alert_price is not None:
                     price_diff = abs(alert_price - chain_price)
                     if price_diff > 0.30:
@@ -390,9 +391,13 @@ class TradingBot:
                             if retry_chain_price is not None:
                                 retry_price_diff = abs(alert_price - retry_chain_price)
                                 if retry_price_diff > 0.30:
-                                    error_msg = f"Price validation failed after retry: Alert price ${alert_price:.2f} differs from chain price ${retry_chain_price:.2f} by ${retry_price_diff:.2f} (max allowed: $0.30). Order rejected."
-                                    logger.warning(error_msg)
-                                    return
+                                    logger.warning(
+                                        f"Price difference still exceeds threshold after retry: Alert price ${alert_price:.2f} differs from chain price ${retry_chain_price:.2f} "
+                                        f"by ${retry_price_diff:.2f}. Creating limit order with alert price ${alert_price:.2f}."
+                                    )
+                                    use_limit_order = True
+                                    chain_price = retry_chain_price
+                                    option_data = retry_option_data
                                 else:
                                     logger.info(f"Price validation passed after retry: Alert price ${alert_price:.2f} vs chain price ${retry_chain_price:.2f} (diff: ${retry_price_diff:.2f})")
                                     chain_price = retry_chain_price
@@ -409,7 +414,11 @@ class TradingBot:
                         logger.info(f"Price validation passed: Alert price ${alert_price:.2f} vs chain price ${chain_price:.2f} (diff: ${price_diff:.2f})")
                 
                 trade_data["contracts"] = contracts
-                trade_data["price"] = chain_price
+                if use_limit_order and alert_price is not None:
+                    trade_data["price"] = alert_price
+                    logger.info(f"Using limit order with alert price ${alert_price:.2f} (chain price: ${chain_price:.2f})")
+                else:
+                    trade_data["price"] = chain_price
                 
                 option_symbol = option_data.get("symbol")
                 if not option_symbol:

@@ -82,6 +82,12 @@ class OrderExecutor:
                 adjusted_price = max(original_price - 0.15, 0.01)
                 order_data["price"] = str(adjusted_price)
                 logger.info(f"Using limit order for SOLD: original price ${original_price:.2f}, adjusted price ${adjusted_price:.2f} (${original_price - adjusted_price:.2f} below)")
+            elif action == "BOUGHT" and "price" in trade_data:
+                order_type = "limit"
+                order_data["type"] = "limit"
+                limit_price = float(trade_data["price"])
+                order_data["price"] = str(limit_price)
+                logger.info(f"Using limit order for BOUGHT: limit price ${limit_price:.2f}")
             
             logger.info(f"Placing order: {action} {actual_quantity} {option_symbol} ({side})")
             
