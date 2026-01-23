@@ -414,9 +414,12 @@ class TradingBot:
                         logger.info(f"Price validation passed: Alert price ${alert_price:.2f} vs chain price ${chain_price:.2f} (diff: ${price_diff:.2f})")
                 
                 trade_data["contracts"] = contracts
-                if use_limit_order and alert_price is not None:
+                if alert_price is not None:
                     trade_data["price"] = alert_price
-                    logger.info(f"Using limit order with alert price ${alert_price:.2f} (chain price: ${chain_price:.2f})")
+                    if use_limit_order:
+                        logger.info(f"Using limit order with parsed alert price ${alert_price:.2f} (chain price: ${chain_price:.2f})")
+                    else:
+                        logger.info(f"Using limit order with parsed alert price ${alert_price:.2f} (chain price: ${chain_price:.2f}, diff: ${abs(alert_price - chain_price):.2f})")
                 else:
                     trade_data["price"] = chain_price
                 
