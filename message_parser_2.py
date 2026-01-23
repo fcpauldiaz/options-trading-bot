@@ -32,6 +32,16 @@ class MessageParser2:
             r'([A-Z]+)\s+(\d+\.?\d*)([CP])\s+\$?([\d.]+)\s+\[([^\]]+)\]',
             re.IGNORECASE
         )
+        
+        self.spacemonkey_sold_fraction_pattern = re.compile(
+            r'\*{0,2}SOLD\*{0,2}\s+([A-Z]+)\s+(\d+\.?\d*)([CP])\s+\$?([\d.]+)\s+(\d+)/(\d+)',
+            re.IGNORECASE
+        )
+        
+        self.spacemonkey_sold_all_out_pattern = re.compile(
+            r'\*{0,2}SOLD\*{0,2}\s+([A-Z]+)\s+(\d+\.?\d*)([CP])\s+\$?([\d.]+)\s+ALL\s+OUT',
+            re.IGNORECASE
+        )
 
     def _parse_date(self, date_str):
         try:
@@ -204,6 +214,46 @@ class MessageParser2:
                         "size_indicator": size_indicator,
                         "valid": True
                     }
+        
+        match = self.spacemonkey_sold_all_out_pattern.search(message_content)
+        if match:
+            ticker = match.group(1).upper()
+            strike = float(match.group(2))
+            option_type = match.group(3).upper()
+            price = float(match.group(4))
+            
+            return {
+                "action": "SOLD",
+                "ticker": ticker,
+                "strike": strike,
+                "option_type": option_type,
+                "expiration_date": None,
+                "price": price,
+                "contracts": 0,
+                "all_out": True,
+                "valid": True
+            }
+        
+        match = self.spacemonkey_sold_fraction_pattern.search(message_content)
+        if match:
+            ticker = match.group(1).upper()
+            strike = float(match.group(2))
+            option_type = match.group(3).upper()
+            price = float(match.group(4))
+            sold_numerator = int(match.group(5))
+            sold_denominator = int(match.group(6))
+            
+            return {
+                "action": "SOLD",
+                "ticker": ticker,
+                "strike": strike,
+                "option_type": option_type,
+                "expiration_date": None,
+                "price": price,
+                "fraction": (sold_numerator, sold_denominator),
+                "use_fraction": True,
+                "valid": True
+            }
         
         logger.debug(f"Spacemonkey message did not match pattern: {message_content[:100]}")
         return {"valid": False}

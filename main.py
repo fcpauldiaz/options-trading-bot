@@ -427,6 +427,67 @@ class TradingBot:
                     return
                 
                 logger.info(f"Parsed spacemonkey trade: {trade_data['action']} {trade_data['contracts']} {trade_data['ticker']} {trade_data['strike']}{trade_data['option_type']} [${dollar_amount:.2f}, {size_indicator}]")
+            elif action == "SOLD":
+                position = self.position_tracker.get_position(
+                    trade_data["ticker"],
+                    trade_data["strike"],
+                    trade_data["option_type"]
+                )
+                
+                if position <= 0:
+                    error_msg = f"SOLD order rejected: No open position for {trade_data['ticker']} {trade_data['strike']}{trade_data['option_type']}"
+                    logger.warning(error_msg)
+                    return
+                
+                if trade_data.get("all_out"):
+                    trade_data["contracts"] = position
+                    logger.info(f"ALL OUT detected: Using current position of {position} contracts")
+                elif trade_data.get("use_fraction"):
+                    numerator, denominator = trade_data["fraction"]
+                    sold_quantity = int(position * numerator / denominator)
+                    if sold_quantity <= 0:
+                        logger.warning(f"Fraction calculation resulted in 0 or negative quantity: {numerator}/{denominator} of {position}. Closing entire position instead.")
+                        trade_data["contracts"] = position
+                        logger.info(f"Closing entire position: {position} contracts")
+                    else:
+                        remaining = position - sold_quantity
+                        trade_data["contracts"] = remaining
+                        logger.info(f"Fraction detected ({numerator}/{denominator}): Position {position}, selling {sold_quantity}, remaining {remaining} contracts")
+                else:
+                    error_msg = "SOLD order format not recognized"
+                    logger.warning(error_msg)
+                    return
+                
+                option_symbol = self.option_resolver.resolve_option_symbol(
+                    trade_data["ticker"],
+                    trade_data["strike"],
+                    trade_data["option_type"]
+                )
+                
+                if not option_symbol:
+                    error_msg = f"Could not resolve option symbol for {trade_data['ticker']} {trade_data['strike']}{trade_data['option_type']}"
+                    logger.error(error_msg)
+                    return
+                
+                if "price" not in trade_data:
+                    logger.info(f"Fetching price for SOLD trade: {trade_data['ticker']} {trade_data['strike']}{trade_data['option_type']}")
+                    option_data = self.option_resolver.get_option_price(
+                        trade_data["ticker"],
+                        trade_data["strike"],
+                        trade_data["option_type"]
+                    )
+                    
+                    if option_data:
+                        chain_price = self._calculate_chain_price(option_data, use_bid_fallback=True)
+                        if chain_price:
+                            trade_data["price"] = chain_price
+                            logger.info(f"Fetched price for SOLD trade: ${chain_price:.2f}")
+                        else:
+                            logger.warning(f"Could not determine price for SOLD trade {trade_data['ticker']} {trade_data['strike']}{trade_data['option_type']}")
+                    else:
+                        logger.warning(f"Could not fetch option data for SOLD trade {trade_data['ticker']} {trade_data['strike']}{trade_data['option_type']}")
+                
+                logger.info(f"Parsed spacemonkey trade: {trade_data['action']} {trade_data['contracts']} {trade_data['ticker']} {trade_data['strike']}{trade_data['option_type']}")
             else:
                 logger.warning(f"Spacemonkey message {message.id} has unsupported action: {action}")
                 return
