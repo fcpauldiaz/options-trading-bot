@@ -34,12 +34,12 @@ class MessageParser2:
         )
         
         self.spacemonkey_sold_fraction_pattern = re.compile(
-            r'\*{0,2}SOLD\*{0,2}\s+([A-Z]+)\s+(\d+\.?\d*)([CP])\s+\$?([\d.]+)\s+(\d+)/(\d+)',
+            r'\*{0,2}SOLD\*{0,2}\s+([A-Z]+)\s+(?:\d{1,2}/\d{1,2}(?:/\d{4})?\s+)?(\d+\.?\d*)([CP])\s+\$?([\d.]+)\s+(\d+)/(\d+)',
             re.IGNORECASE
         )
         
         self.spacemonkey_sold_all_out_pattern = re.compile(
-            r'\*{0,2}SOLD\*{0,2}\s+([A-Z]+)\s+(\d+\.?\d*)([CP])\s+\$?([\d.]+)\s+ALL\s+OUT',
+            r'\*{0,2}SOLD\*{0,2}\s+([A-Z]+)\s+(?:\d{1,2}/\d{1,2}(?:/\d{4})?\s+)?(\d+\.?\d*)([CP])\s+\$?([\d.]+)\s+ALL\s+OUT',
             re.IGNORECASE
         )
 
