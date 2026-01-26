@@ -24,12 +24,12 @@ class MessageParser2:
         )
         
         self.spacemonkey_bought_pattern = re.compile(
-            r'\*{0,2}BOUGHT\*{0,2}\s+([A-Z]+)\s+(\d+\.?\d*)([CP])\s+\$?([\d.]+)\s+\[([^\]]+)\]',
+            r'\*{0,2}BOUGHT\*{0,2}\s+([A-Z]+)\s+(?:\d{1,2}/\d{1,2}(?:/\d{4})?\s+)?(\d+\.?\d*)([CP])\s+\$?([\d.]+)\s+\[([^\]]+)\]',
             re.IGNORECASE
         )
         
         self.spacemonkey_bought_title_pattern = re.compile(
-            r'([A-Z]+)\s+(\d+\.?\d*)([CP])\s+\$?([\d.]+)\s+\[([^\]]+)\]',
+            r'([A-Z]+)\s+(?:\d{1,2}/\d{1,2}(?:/\d{4})?\s+)?(\d+\.?\d*)([CP])\s+\$?([\d.]+)\s+\[([^\]]+)\]',
             re.IGNORECASE
         )
         
