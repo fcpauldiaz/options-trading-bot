@@ -72,6 +72,14 @@ class MessageParser2:
         for indicator in self.size_indicators:
             if indicator.upper() == size_upper:
                 return indicator
+        
+        if size_upper == "B GRADE" or size_upper == "GRADE B":
+            return "GRADE B"
+        if size_upper == "A GRADE" or size_upper == "GRADE A":
+            return "GRADE A"
+        if size_upper == "ROLL UP" or size_upper == "ROLLUP":
+            return "ROLLUP"
+        
         return None
 
     def parse(self, message_content):

@@ -359,8 +359,8 @@ class TradingBot:
                 contracts = self.size_calculator.calculate_contracts(dollar_amount, chain_price)
                 if contracts <= 0:
                     error_msg = f"Calculated contracts is 0 or negative for {trade_data['ticker']} {trade_data['strike']}{trade_data['option_type']}"
-                    logger.warning(error_msg)
-                    return
+                    logger.warning(f"{error_msg}. Using minimum 1 contract for entry order.")
+                    contracts = 1
                 
                 max_contracts = 10
                 if contracts > max_contracts:
@@ -712,20 +712,8 @@ class TradingBot:
                 contracts = self.size_calculator.calculate_contracts(dollar_amount, chain_price)
                 if contracts <= 0:
                     error_msg = f"Calculated contracts is 0 or negative for {trade_data['ticker']} {trade_data['strike']}{trade_data['option_type']}"
-                    logger.warning(error_msg)
-                    try:
-                        send_scraper2_failure_notification(
-                            message.id,
-                            "calculation_error",
-                            error_msg,
-                            trade_data,
-                            trading_mode_2
-                        )
-                    except Exception as e:
-                        logger.error(f"Failed to send failure notification: {e}", exc_info=True)
-                    if self.scraper_2:
-                        self.scraper_2.mark_message_processed(message.id)
-                    return
+                    logger.warning(f"{error_msg}. Using minimum 1 contract for entry order.")
+                    contracts = 1
                 
                 max_contracts = 10
                 if contracts > max_contracts:
