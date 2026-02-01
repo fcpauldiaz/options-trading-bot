@@ -46,12 +46,12 @@ class SizeCalculator:
         return lotto_amount
     
     def get_rollup_size(self, daily_pnl):
-        if daily_pnl is None or daily_pnl <= 0:
-            logger.warning("ROLLUP trade rejected: No daily gains or P&L unavailable")
-            return None
-        
         min_size = 300
         max_size = 750
+        
+        if daily_pnl is None or daily_pnl <= 0:
+            logger.info(f"ROLLUP size: using default ${min_size:.2f} (daily P&L not verified)")
+            return min_size
         
         rollup_amount = daily_pnl * 0.30
         

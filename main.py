@@ -323,12 +323,14 @@ class TradingBot:
                 size_indicator = trade_data["size_indicator"]
                 daily_pnl = None
                 
-                if size_indicator == "LOTTO" or size_indicator == "ROLLUP":
+                if size_indicator == "LOTTO":
                     daily_pnl = self.db_client.get_daily_pnl()
                     if daily_pnl <= 0:
                         error_msg = f"{size_indicator} trade rejected: Daily P&L is ${daily_pnl:.2f} (must be positive)"
                         logger.warning(error_msg)
                         return
+                elif size_indicator == "ROLLUP":
+                    daily_pnl = self.db_client.get_daily_pnl()
                 
                 option_data = self.option_resolver.get_option_price(
                     trade_data["ticker"],
@@ -628,7 +630,7 @@ class TradingBot:
                 size_indicator = trade_data["size_indicator"]
                 daily_pnl = None
                 
-                if size_indicator == "LOTTO" or size_indicator == "ROLLUP":
+                if size_indicator == "LOTTO":
                     daily_pnl = self.db_client.get_daily_pnl()
                     if daily_pnl <= 0:
                         error_msg = f"{size_indicator} trade rejected: Daily P&L is ${daily_pnl:.2f} (must be positive)"
@@ -646,6 +648,8 @@ class TradingBot:
                         if self.scraper_2:
                             self.scraper_2.mark_message_processed(message.id)
                         return
+                elif size_indicator == "ROLLUP":
+                    daily_pnl = self.db_client.get_daily_pnl()
                 
                 option_data = self.option_resolver_2.get_option_price(
                     trade_data["ticker"],
