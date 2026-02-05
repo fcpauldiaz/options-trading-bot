@@ -75,7 +75,7 @@ class OrderExecutor:
                 "duration": "day"
             }
             
-            if action == "SOLD" and "price" in trade_data:
+            if action == "SOLD" and "price" in trade_data and ticker.upper() != "SPX":
                 order_type = "limit"
                 order_data["type"] = "limit"
                 original_price = float(trade_data["price"])
