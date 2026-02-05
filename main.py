@@ -110,6 +110,7 @@ class TradingBot:
             
             if "SWING" in content.upper():
                 logger.info(f"Skipping SWING trade message {message.id}")
+                self.scraper.mark_message_processed(message.id)
                 return
             
             if message.is_spacemonkey():
@@ -292,6 +293,7 @@ class TradingBot:
                     actual_quantity,
                     price
                 )
+                self.scraper.mark_message_processed(message.id)
             else:
                 logger.error(f"Order failed: {order_result.get('error', 'Unknown error')}")
                 
@@ -358,7 +360,8 @@ class TradingBot:
                     logger.error(error_msg)
                     return
                 
-                contracts = self.size_calculator.calculate_contracts(dollar_amount, chain_price)
+                price_for_size = trade_data.get("price") if trade_data.get("price") is not None else chain_price
+                contracts = self.size_calculator.calculate_contracts(dollar_amount, price_for_size)
                 if contracts <= 0:
                     error_msg = f"Calculated contracts is 0 or negative for {trade_data['ticker']} {trade_data['strike']}{trade_data['option_type']}"
                     logger.warning(f"{error_msg}. Using minimum 1 contract for entry order.")
@@ -527,6 +530,7 @@ class TradingBot:
                     actual_quantity,
                     price
                 )
+                self.scraper.mark_message_processed(message.id)
             else:
                 error_msg = order_result.get('error', 'Unknown error')
                 logger.error(f"Order failed: {error_msg}")
@@ -713,7 +717,8 @@ class TradingBot:
                         self.scraper_2.mark_message_processed(message.id)
                     return
                 
-                contracts = self.size_calculator.calculate_contracts(dollar_amount, chain_price)
+                price_for_size = trade_data.get("price") if trade_data.get("price") is not None else chain_price
+                contracts = self.size_calculator.calculate_contracts(dollar_amount, price_for_size)
                 if contracts <= 0:
                     error_msg = f"Calculated contracts is 0 or negative for {trade_data['ticker']} {trade_data['strike']}{trade_data['option_type']}"
                     logger.warning(f"{error_msg}. Using minimum 1 contract for entry order.")

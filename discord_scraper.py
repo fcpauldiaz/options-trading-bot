@@ -88,6 +88,12 @@ class DiscordScraper:
         except Exception as e:
             logger.error(f"Error saving processed message ID {message_id}: {e}")
 
+    def mark_message_processed(self, message_id):
+        if message_id not in self.processed_message_ids:
+            self.processed_message_ids.add(message_id)
+            self.save_processed_message_id(message_id)
+            logger.debug(f"Marked message {message_id} as processed")
+
     async def connect(self):
         if not self.token:
             raise ValueError("DISCORD_TOKEN not set")
@@ -156,8 +162,6 @@ class DiscordScraper:
                             if message_date == today:
                                 if msg.is_spacemonkey():
                                     messages.append(msg)
-                                    self.processed_message_ids.add(msg.id)
-                                    self.save_processed_message_id(msg.id)
                                 else:
                                     spacemonkey_filtered_count += 1
                                     logger.debug(f"Filtered message {msg.id} (not spacemonkey)")
