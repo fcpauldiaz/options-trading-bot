@@ -50,6 +50,14 @@ class Message:
                 titles.append(embed["title"])
         return titles
 
+    def has_small_account_challenge(self):
+        for embed in self.embeds:
+            if isinstance(embed, dict):
+                description = embed.get("description", "")
+                if isinstance(description, str) and "SmallAccountChallenge" in description:
+                    return True
+        return False
+
 class DiscordScraper:
     def __init__(self, processed_ids_file="processed_messages.txt"):
         self.token = DISCORD_TOKEN
@@ -153,6 +161,7 @@ class DiscordScraper:
                 today = datetime.now().date()
                 filtered_count = 0
                 spacemonkey_filtered_count = 0
+                small_account_filtered_count = 0
                 
                 for msg_data in messages_data:
                     msg = Message(msg_data)
@@ -160,11 +169,14 @@ class DiscordScraper:
                         if msg.timestamp:
                             message_date = msg.timestamp.date()
                             if message_date == today:
-                                if msg.is_spacemonkey():
-                                    messages.append(msg)
-                                else:
+                                if not msg.is_spacemonkey():
                                     spacemonkey_filtered_count += 1
                                     logger.debug(f"Filtered message {msg.id} (not spacemonkey)")
+                                elif not msg.has_small_account_challenge():
+                                    small_account_filtered_count += 1
+                                    logger.debug(f"Filtered message {msg.id} (spacemonkey but not SmallAccountChallenge)")
+                                else:
+                                    messages.append(msg)
                             else:
                                 filtered_count += 1
                                 logger.debug(f"Filtered message {msg.id} from {message_date} (not today)")
@@ -175,9 +187,11 @@ class DiscordScraper:
                     logger.debug(f"Filtered {filtered_count} messages from previous days")
                 if spacemonkey_filtered_count > 0:
                     logger.debug(f"Filtered {spacemonkey_filtered_count} messages (not spacemonkey)")
+                if small_account_filtered_count > 0:
+                    logger.debug(f"Filtered {small_account_filtered_count} messages (spacemonkey but not SmallAccountChallenge)")
                 
                 if messages:
-                    logger.info(f"Found {len(messages)} new spacemonkey messages from today")
+                    logger.info(f"Found {len(messages)} new spacemonkey SmallAccountChallenge messages from today")
                 
                 return messages
         except Exception as e:
