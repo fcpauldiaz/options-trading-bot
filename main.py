@@ -318,33 +318,15 @@ class TradingBot:
             option_symbol = None
             
             if action == "BOUGHT":
-                if "size_indicator" not in trade_data:
-                    logger.warning(f"BOUGHT order rejected: No size indicator found in spacemonkey message {message.id}")
-                    return
-                
-                size_indicator = trade_data["size_indicator"]
-                daily_pnl = None
-                
-                if size_indicator == "LOTTO":
-                    daily_pnl = self.db_client.get_daily_pnl()
-                    if daily_pnl <= 0:
-                        error_msg = f"{size_indicator} trade rejected: Daily P&L is ${daily_pnl:.2f} (must be positive)"
-                        logger.warning(error_msg)
-                        return
-                elif size_indicator == "ROLLUP":
-                    daily_pnl = self.db_client.get_daily_pnl()
-                
                 option_data = self.option_resolver.get_option_price(
                     trade_data["ticker"],
                     trade_data["strike"],
                     trade_data["option_type"]
                 )
-                
                 if not option_data:
                     error_msg = f"Could not get option price data for {trade_data['ticker']} {trade_data['strike']}{trade_data['option_type']}"
                     logger.error(error_msg)
                     return
-                
                 chain_price = self._calculate_chain_price(option_data)
                 if chain_price is None:
                     bid = option_data.get("bid", 0) or 0
@@ -353,24 +335,39 @@ class TradingBot:
                     error_msg = f"Could not determine chain price for {trade_data['ticker']} {trade_data['strike']}{trade_data['option_type']} - bid: {bid}, ask: {ask}, last: {last_price}"
                     logger.warning(error_msg)
                     return
-                
-                dollar_amount = self.size_calculator.get_dollar_amount(size_indicator, daily_pnl)
-                if dollar_amount is None:
-                    error_msg = f"Could not determine dollar amount for size indicator: {size_indicator}"
-                    logger.error(error_msg)
-                    return
-                
-                price_for_size = trade_data.get("price") if trade_data.get("price") is not None else chain_price
-                contracts = self.size_calculator.calculate_contracts(dollar_amount, price_for_size)
-                if contracts <= 0:
-                    error_msg = f"Calculated contracts is 0 or negative for {trade_data['ticker']} {trade_data['strike']}{trade_data['option_type']}"
-                    logger.warning(f"{error_msg}. Using minimum 1 contract for entry order.")
-                    contracts = 1
-                
-                max_contracts = 10
-                if contracts > max_contracts:
-                    logger.warning(f"Calculated contracts ({contracts}) exceeds maximum ({max_contracts}). Capping to {max_contracts} contracts.")
-                    contracts = max_contracts
+
+                contracts_from_desc = self.parser_2.parse_contracts_from_description(content, "BOUGHT")
+                if contracts_from_desc is not None:
+                    contracts = max(1, min(contracts_from_desc, 10))
+                    dollar_amount = None
+                    size_indicator = None
+                else:
+                    if "size_indicator" not in trade_data:
+                        logger.warning(f"BOUGHT order rejected: No size indicator or CONTRACTS: BOUGHT in spacemonkey message {message.id}")
+                        return
+                    size_indicator = trade_data["size_indicator"]
+                    daily_pnl = None
+                    if size_indicator == "LOTTO":
+                        daily_pnl = self.db_client.get_daily_pnl()
+                        if daily_pnl <= 0:
+                            error_msg = f"{size_indicator} trade rejected: Daily P&L is ${daily_pnl:.2f} (must be positive)"
+                            logger.warning(error_msg)
+                            return
+                    elif size_indicator == "ROLLUP":
+                        daily_pnl = self.db_client.get_daily_pnl()
+                    dollar_amount = self.size_calculator.get_dollar_amount(size_indicator, daily_pnl)
+                    if dollar_amount is None:
+                        error_msg = f"Could not determine dollar amount for size indicator: {size_indicator}"
+                        logger.error(error_msg)
+                        return
+                    price_for_size = trade_data.get("price") if trade_data.get("price") is not None else chain_price
+                    contracts = self.size_calculator.calculate_contracts(dollar_amount, price_for_size)
+                    if contracts <= 0:
+                        logger.warning(
+                            f"Calculated contracts is 0 or negative for {trade_data['ticker']} {trade_data['strike']}{trade_data['option_type']}. Using minimum 1 contract."
+                        )
+                        contracts = 1
+                    contracts = min(contracts, 10)
                 
                 alert_price = trade_data.get("price")
                 use_limit_order = False
@@ -434,20 +431,26 @@ class TradingBot:
                     logger.error(error_msg)
                     return
                 
-                logger.info(f"Parsed spacemonkey trade: {trade_data['action']} {trade_data['contracts']} {trade_data['ticker']} {trade_data['strike']}{trade_data['option_type']} [${dollar_amount:.2f}, {size_indicator}]")
+                if dollar_amount is not None and size_indicator is not None:
+                    logger.info(f"Parsed spacemonkey trade: {trade_data['action']} {trade_data['contracts']} {trade_data['ticker']} {trade_data['strike']}{trade_data['option_type']} [${dollar_amount:.2f}, {size_indicator}]")
+                else:
+                    logger.info(f"Parsed spacemonkey trade: {trade_data['action']} {trade_data['contracts']} {trade_data['ticker']} {trade_data['strike']}{trade_data['option_type']} [CONTRACTS from description]")
             elif action == "SOLD":
                 position = self.position_tracker.get_position(
                     trade_data["ticker"],
                     trade_data["strike"],
                     trade_data["option_type"]
                 )
-                
                 if position <= 0:
                     error_msg = f"SOLD order rejected: No open position for {trade_data['ticker']} {trade_data['strike']}{trade_data['option_type']}"
                     logger.warning(error_msg)
                     return
-                
-                if trade_data.get("all_out"):
+
+                contracts_from_desc = self.parser_2.parse_contracts_from_description(content, "SOLD")
+                if contracts_from_desc is not None:
+                    trade_data["contracts"] = min(contracts_from_desc, position)
+                    logger.info(f"Using CONTRACTS from description: {contracts_from_desc}, position {position} -> selling {trade_data['contracts']}")
+                elif trade_data.get("all_out"):
                     trade_data["contracts"] = position
                     logger.info(f"ALL OUT detected: Using current position of {position} contracts")
                 elif trade_data.get("use_fraction"):

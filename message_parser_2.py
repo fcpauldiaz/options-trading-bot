@@ -43,6 +43,33 @@ class MessageParser2:
             re.IGNORECASE
         )
 
+        self.contracts_bought_pattern = re.compile(
+            r'CONTRACTS:\s*BOUGHT\s*(\d+)',
+            re.IGNORECASE
+        )
+        self.contracts_sold_pattern = re.compile(
+            r'CONTRACTS:\s*SOLD\s*(\d+)',
+            re.IGNORECASE
+        )
+        self.all_out_of_pattern = re.compile(
+            r'ALL\s+OUT\s+of\s+(\d+)',
+            re.IGNORECASE
+        )
+
+    def parse_contracts_from_description(self, text: str, action: str) -> int | None:
+        if not text:
+            return None
+        if action == "BOUGHT":
+            m = self.contracts_bought_pattern.search(text)
+            return int(m.group(1)) if m else None
+        if action == "SOLD":
+            m = self.contracts_sold_pattern.search(text)
+            if m:
+                return int(m.group(1))
+            m = self.all_out_of_pattern.search(text)
+            return int(m.group(1)) if m else None
+        return None
+
     def _parse_date(self, date_str):
         try:
             parts = date_str.split('/')
