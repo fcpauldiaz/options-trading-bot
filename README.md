@@ -70,9 +70,25 @@ docker-compose -f docker-compose.prod.yaml up -d
 - `TURSO_AUTH_TOKEN`: Your Turso authentication token
 - Discord token and Tradier credentials are read from `.env` file or environment variables
 
+### Webhook mode
+
+Set `USE_WEBHOOK=true` to disable Discord API scraping and receive trading data via HTTP webhooks. The bot listens for `POST /webhook/discord` with JSON:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `app_id` | string | App identifier (e.g. `com.hnc.Discord`). Only matching `WEBHOOK_APP_ID_ALLOWED` is accepted. |
+| `title` | string | Notification title (e.g. server name). |
+| `subtitle` | string | Notification subtitle (e.g. `#channel`). Used to route to channel 2 when listed in `WEBHOOK_SUBTITLE_CHANNEL_2`. |
+| `body` | string | Message body (parseable trading text). |
+| `delivered_date` | number \| null | Unix timestamp in seconds, or null. |
+| `delivered_date_iso` | string | Human-readable UTC time, or empty string. |
+
+- `WEBHOOK_PORT`: Port for the webhook server (default 8080).
+- `WEBHOOK_SUBTITLE_CHANNEL_2`: Comma-separated subtitles that route to channel 2; others use channel 1.
+
 ## Features
 
-- Monitors Discord channel for trading signals
+- Monitors Discord channel for trading signals (or receives them via webhook when `USE_WEBHOOK=true`)
 - Parses trading messages (BOUGHT/SOLD format) with support for Unicode fractions
 - Resolves option symbols with closest expiry dates
 - Places market/limit orders via Tradier API

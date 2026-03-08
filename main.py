@@ -1,11 +1,21 @@
 import argparse
 import asyncio
 import logging
+import random
 import os
 import signal
 import sys
 from datetime import datetime
-from config import DISCORD_TOKEN, TRADING_MODE, TRADING_MODE_CHANNEL_2, DISCORD_CHANNEL_ID_2
+
+import aiohttp.web
+from config import (
+    DISCORD_TOKEN,
+    TRADING_MODE,
+    TRADING_MODE_CHANNEL_2,
+    DISCORD_CHANNEL_ID_2,
+    USE_WEBHOOK,
+    WEBHOOK_PORT,
+)
 from discord_scraper import DiscordScraper
 from discord_scraper_2 import DiscordScraper2
 from message_parser import MessageParser
@@ -19,6 +29,7 @@ from db_client import DBClient
 from size_calculator import SizeCalculator
 from ntfy_notifier import send_trade_notification, send_scraper2_entry_notification, send_scraper2_failure_notification
 from market_hours import is_market_open
+from webhook_server import WebhookProcessedTracker, create_app
 
 os.makedirs('logs', exist_ok=True)
 
@@ -65,12 +76,27 @@ class TradingBot:
             self.tradier_client_2 = None
             self.option_resolver_2 = None
             self.order_executor_2 = None
-        
+
+        self.webhook_tracker = WebhookProcessedTracker() if USE_WEBHOOK else None
+
+    def _mark_message_processed(self, message, channel: int = 1) -> None:
+        if getattr(message, "is_webhook", False) and self.webhook_tracker:
+            self.webhook_tracker.mark_processed(message.id, message.channel)
+        elif channel == 1:
+            self._mark_message_processed(message, 1)
+        elif self.scraper_2:
+            self._mark_message_processed(message, 2)
+
     async def initialize(self):
+        if USE_WEBHOOK:
+            logger.info("Webhook mode: Discord scraping disabled")
+            logger.info(f"Channel 1: {TRADING_MODE} mode")
+            if DISCORD_CHANNEL_ID_2:
+                logger.info(f"Channel 2 trading mode: {TRADING_MODE_CHANNEL_2}")
+            return
         if not DISCORD_TOKEN:
             logger.error("DISCORD_TOKEN not set. Please set it in .env file or environment variable.")
             sys.exit(1)
-        
         logger.info(f"Starting trading bot - Channel 1: {TRADING_MODE} mode")
         if DISCORD_CHANNEL_ID_2:
             logger.info(f"Channel 2 trading mode: {TRADING_MODE_CHANNEL_2}")
@@ -110,7 +136,7 @@ class TradingBot:
             
             if "SWING" in content.upper():
                 logger.info(f"Skipping SWING trade message {message.id}")
-                self.scraper.mark_message_processed(message.id)
+                self._mark_message_processed(message, 1)
                 return
             
             if message.is_spacemonkey():
@@ -293,7 +319,7 @@ class TradingBot:
                     actual_quantity,
                     price
                 )
-                self.scraper.mark_message_processed(message.id)
+                self._mark_message_processed(message, 1)
             else:
                 logger.error(f"Order failed: {order_result.get('error', 'Unknown error')}")
                 
@@ -533,7 +559,7 @@ class TradingBot:
                     actual_quantity,
                     price
                 )
-                self.scraper.mark_message_processed(message.id)
+                self._mark_message_processed(message, 1)
             else:
                 error_msg = order_result.get('error', 'Unknown error')
                 logger.error(f"Order failed: {error_msg}")
@@ -543,31 +569,39 @@ class TradingBot:
 
     async def run(self):
         self.running = True
+        if USE_WEBHOOK:
+            logger.info("Bot started. Webhook endpoint listening for Discord notifications.")
+            app = create_app(self, self.webhook_tracker)
+            runner = aiohttp.web.AppRunner(app)
+            await runner.setup()
+            site = aiohttp.web.TCPSite(runner, "0.0.0.0", WEBHOOK_PORT)
+            await site.start()
+            logger.info(f"Webhook server listening on port {WEBHOOK_PORT}, path POST /webhook/discord")
+            while self.running:
+                await asyncio.sleep(1)
+            await runner.cleanup()
+            return
         logger.info("Bot started. Monitoring Discord channels...")
-        
         while self.running:
             try:
                 if not is_market_open():
                     logger.debug("Market is closed. Skipping Discord scraping.")
-                    await asyncio.sleep(1)
+                    await asyncio.sleep(random.uniform(5, 10))
                     continue
-                
                 messages = await self.scraper.get_new_messages()
                 for message in messages:
                     await self.process_message(message)
-                
                 if self.scraper_2:
                     messages_2 = await self.scraper_2.get_new_messages()
                     for message in messages_2:
                         await self.process_message_2(message)
-                
-                await asyncio.sleep(1)
+                await asyncio.sleep(random.uniform(5, 10))
             except KeyboardInterrupt:
                 logger.info("Received interrupt signal")
                 break
             except Exception as e:
                 logger.error(f"Error in main loop: {e}", exc_info=True)
-                await asyncio.sleep(1)
+                await asyncio.sleep(random.uniform(5, 10))
 
     async def process_debug_text(self, text):
         logger.info(f"Debug mode: Processing text: {text}")
@@ -583,7 +617,7 @@ class TradingBot:
             if "SWING" in content.upper():
                 logger.info(f"Skipping SWING trade message {message.id}")
                 if self.scraper_2:
-                    self.scraper_2.mark_message_processed(message.id)
+                    self._mark_message_processed(message, 2)
                 return
             
             if not self.parser_2:
@@ -611,7 +645,7 @@ class TradingBot:
                 except Exception as e:
                     logger.error(f"Failed to send failure notification: {e}", exc_info=True)
                 if self.scraper_2:
-                    self.scraper_2.mark_message_processed(message.id)
+                    self._mark_message_processed(message, 2)
                 return
             
             action = trade_data["action"]
@@ -631,7 +665,7 @@ class TradingBot:
                     except Exception as e:
                         logger.error(f"Failed to send failure notification: {e}", exc_info=True)
                     if self.scraper_2:
-                        self.scraper_2.mark_message_processed(message.id)
+                        self._mark_message_processed(message, 2)
                     return
                 
                 size_indicator = trade_data["size_indicator"]
@@ -653,7 +687,7 @@ class TradingBot:
                         except Exception as e:
                             logger.error(f"Failed to send failure notification: {e}", exc_info=True)
                         if self.scraper_2:
-                            self.scraper_2.mark_message_processed(message.id)
+                            self._mark_message_processed(message, 2)
                         return
                 elif size_indicator == "ROLLUP":
                     daily_pnl = self.db_client.get_daily_pnl()
@@ -678,7 +712,7 @@ class TradingBot:
                     except Exception as e:
                         logger.error(f"Failed to send failure notification: {e}", exc_info=True)
                     if self.scraper_2:
-                        self.scraper_2.mark_message_processed(message.id)
+                        self._mark_message_processed(message, 2)
                     return
                 
                 chain_price = self._calculate_chain_price(option_data)
@@ -699,7 +733,7 @@ class TradingBot:
                     except Exception as e:
                         logger.error(f"Failed to send failure notification: {e}", exc_info=True)
                     if self.scraper_2:
-                        self.scraper_2.mark_message_processed(message.id)
+                        self._mark_message_processed(message, 2)
                     return
                 
                 dollar_amount = self.size_calculator.get_dollar_amount(size_indicator, daily_pnl)
@@ -717,7 +751,7 @@ class TradingBot:
                     except Exception as e:
                         logger.error(f"Failed to send failure notification: {e}", exc_info=True)
                     if self.scraper_2:
-                        self.scraper_2.mark_message_processed(message.id)
+                        self._mark_message_processed(message, 2)
                     return
                 
                 price_for_size = trade_data.get("price") if trade_data.get("price") is not None else chain_price
@@ -813,7 +847,7 @@ class TradingBot:
                                     except Exception as e:
                                         logger.error(f"Failed to send failure notification: {e}", exc_info=True)
                                     if self.scraper_2:
-                                        self.scraper_2.mark_message_processed(message.id)
+                                        self._mark_message_processed(message, 2)
                                     return
                                 else:
                                     logger.info(f"Price validation passed after retry: Alert price ${alert_price:.2f} vs chain price ${retry_chain_price:.2f} (diff: ${retry_price_diff:.2f})")
@@ -833,7 +867,7 @@ class TradingBot:
                                 except Exception as e:
                                     logger.error(f"Failed to send failure notification: {e}", exc_info=True)
                                 if self.scraper_2:
-                                    self.scraper_2.mark_message_processed(message.id)
+                                    self._mark_message_processed(message, 2)
                                 return
                         else:
                             error_msg = f"Price validation failed: Could not get option price data after retry for {trade_data['ticker']} {trade_data['strike']}{trade_data['option_type']}"
@@ -849,7 +883,7 @@ class TradingBot:
                             except Exception as e:
                                 logger.error(f"Failed to send failure notification: {e}", exc_info=True)
                             if self.scraper_2:
-                                self.scraper_2.mark_message_processed(message.id)
+                                self._mark_message_processed(message, 2)
                             return
                     else:
                         logger.info(f"Price validation passed: Alert price ${alert_price:.2f} vs chain price ${chain_price:.2f} (diff: ${price_diff:.2f})")
@@ -878,7 +912,7 @@ class TradingBot:
                     except Exception as e:
                         logger.error(f"Failed to send failure notification: {e}", exc_info=True)
                     if self.scraper_2:
-                        self.scraper_2.mark_message_processed(message.id)
+                        self._mark_message_processed(message, 2)
                     return
                 
                 logger.info(f"Parsed trade (scraper 2): {trade_data['action']} {trade_data['contracts']} {trade_data['ticker']} {trade_data['strike']}{trade_data['option_type']} exp {trade_data['expiration_date']} [${dollar_amount:.2f}, {size_indicator}]")
@@ -904,7 +938,7 @@ class TradingBot:
                     except Exception as e:
                         logger.error(f"Failed to send failure notification: {e}", exc_info=True)
                     if self.scraper_2:
-                        self.scraper_2.mark_message_processed(message.id)
+                        self._mark_message_processed(message, 2)
                     return
                 
                 if trade_data.get("all_out"):
@@ -935,7 +969,7 @@ class TradingBot:
                     except Exception as e:
                         logger.error(f"Failed to send failure notification: {e}", exc_info=True)
                     if self.scraper_2:
-                        self.scraper_2.mark_message_processed(message.id)
+                        self._mark_message_processed(message, 2)
                     return
                 
                 option_symbol = self.option_resolver_2.resolve_option_symbol_with_expiration(
@@ -959,7 +993,7 @@ class TradingBot:
                     except Exception as e:
                         logger.error(f"Failed to send failure notification: {e}", exc_info=True)
                     if self.scraper_2:
-                        self.scraper_2.mark_message_processed(message.id)
+                        self._mark_message_processed(message, 2)
                     return
                 
                 if "price" not in trade_data:
@@ -995,7 +1029,7 @@ class TradingBot:
                 except Exception as e:
                     logger.error(f"Failed to send failure notification: {e}", exc_info=True)
                 if self.scraper_2:
-                    self.scraper_2.mark_message_processed(message.id)
+                    self._mark_message_processed(message, 2)
                 return
             
             if not option_symbol:
@@ -1012,7 +1046,7 @@ class TradingBot:
                 except Exception as e:
                     logger.error(f"Failed to send failure notification: {e}", exc_info=True)
                 if self.scraper_2:
-                    self.scraper_2.mark_message_processed(message.id)
+                    self._mark_message_processed(message, 2)
                 return
             
             order_result = self.order_executor_2.execute_order(trade_data, option_symbol)
@@ -1041,7 +1075,7 @@ class TradingBot:
                 )
                 
                 if self.scraper_2:
-                    self.scraper_2.mark_message_processed(message.id)
+                    self._mark_message_processed(message, 2)
             else:
                 error_msg = order_result.get('error', 'Unknown error')
                 logger.error(f"Order failed: {error_msg}")
@@ -1056,7 +1090,7 @@ class TradingBot:
                 except Exception as e:
                     logger.error(f"Failed to send failure notification: {e}", exc_info=True)
                 if self.scraper_2:
-                    self.scraper_2.mark_message_processed(message.id)
+                    self._mark_message_processed(message, 2)
                 
         except Exception as e:
             logger.error(f"Error processing message (scraper 2) {message.id}: {e}", exc_info=True)
@@ -1072,7 +1106,7 @@ class TradingBot:
             except Exception as notif_e:
                 logger.error(f"Failed to send failure notification: {notif_e}", exc_info=True)
             if self.scraper_2:
-                self.scraper_2.mark_message_processed(message.id)
+                self._mark_message_processed(message, 2)
 
     async def shutdown(self):
         logger.info("Shutting down bot...")

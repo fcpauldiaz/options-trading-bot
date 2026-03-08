@@ -17,6 +17,11 @@ TRADING_MODE_CHANNEL_2 = os.getenv("TRADING_MODE_CHANNEL_2", "paper")
 DISCORD_CHANNEL_ID = os.getenv("DISCORD_CHANNEL_ID", "")
 DISCORD_CHANNEL_ID_2 = os.getenv("DISCORD_CHANNEL_ID_2", "")
 
+USE_WEBHOOK = os.getenv("USE_WEBHOOK", "").lower() in ("1", "true", "yes")
+WEBHOOK_APP_ID_ALLOWED = os.getenv("WEBHOOK_APP_ID_ALLOWED", "com.hnc.Discord")
+WEBHOOK_PORT = int(os.getenv("WEBHOOK_PORT", "80"))
+WEBHOOK_SUBTITLE_CHANNEL_2 = os.getenv("WEBHOOK_SUBTITLE_CHANNEL_2", "")
+
 SUPABASE_URL = os.getenv("SUPABASE_URL", "")
 SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
 
