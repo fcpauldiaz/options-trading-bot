@@ -151,6 +151,8 @@ async def handle_discord_webhook(request: aiohttp.web.Request) -> aiohttp.web.Re
             status=400,
         )
 
+    logger.info("Webhook payload received: %s", parsed)
+
     bot: "TradingBot" = request.app["bot"]
     tracker: WebhookProcessedTracker = request.app["webhook_tracker"]
 
