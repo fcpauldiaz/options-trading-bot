@@ -132,6 +132,7 @@ async def handle_discord_webhook(request: aiohttp.web.Request) -> aiohttp.web.Re
     try:
         body = await request.read()
         data = json.loads(body) if body else {}
+        logger.info("Webhook received: %s", data)
     except (json.JSONDecodeError, ValueError) as e:
         raw = body.decode("utf-8", errors="replace")[:500] if body else ""
         logger.warning("Webhook 400 Invalid JSON: %s. Payload: %s", e, raw)
@@ -166,11 +167,7 @@ async def handle_discord_webhook(request: aiohttp.web.Request) -> aiohttp.web.Re
             status=400,
         )
 
-    if WEBHOOK_REQUIRED_SENDER and WEBHOOK_REQUIRED_SENDER.lower() not in parsed["body"].lower():
-        logger.debug("Webhook skipped: body does not contain required sender %s", WEBHOOK_REQUIRED_SENDER)
-        return aiohttp.web.Response(status=200)
-
-    logger.info("Webhook payload received: %s", parsed)
+    logger.info("Webhook accepted for processing: %s", parsed)
 
     bot: "TradingBot" = request.app["bot"]
     tracker: WebhookProcessedTracker = request.app["webhook_tracker"]
