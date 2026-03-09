@@ -83,6 +83,12 @@ Set `USE_WEBHOOK=true` to disable Discord API scraping and receive trading data 
 | `delivered_date` | number \| null | Unix timestamp in seconds, or null. |
 | `delivered_date_iso` | string | Human-readable UTC time, or empty string. |
 
+Example payload formats:
+
+- **body** (parseable trading text): `**BOUGHT** CRCL 4/17 150C $3.40 [SMALL] @everyone` (or equivalent SOLD formats with `[SMALL]`, `[LOTTO]`, `[GRADE A]`, etc.)
+- **title** (source metadata): `Twinsight Bot⁩ (⁨#🚨︱pro-alerts⁩, ⁨TRADING FLOOR⁩)`
+- **subtitle**: Used for channel routing; add e.g. `#🚨︱pro-alerts` to `WEBHOOK_SUBTITLE_CHANNEL_2` to route Twinsight alerts to channel 2.
+
 - `WEBHOOK_PORT`: Port for the webhook server (default 8080).
 - `WEBHOOK_SUBTITLE_CHANNEL_2`: Comma-separated subtitles that route to channel 2; others use channel 1.
 

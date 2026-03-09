@@ -194,9 +194,12 @@ class MessageParser2:
                 "valid": True
             }
         
+        result = self.parse_spacemonkey(message_content)
+        if result.get("valid"):
+            return result
         logger.debug(f"Message did not match any pattern: {message_content[:100]}")
         return {"valid": False}
-    
+
     def parse_spacemonkey(self, message_content, embed_titles=None):
         message_content = message_content.strip()
         
