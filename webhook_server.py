@@ -132,7 +132,9 @@ async def handle_discord_webhook(request: aiohttp.web.Request) -> aiohttp.web.Re
     try:
         body = await request.read()
         data = json.loads(body) if body else {}
-    except (json.JSONDecodeError, ValueError):
+    except (json.JSONDecodeError, ValueError) as e:
+        raw = body.decode("utf-8", errors="replace")[:500] if body else ""
+        logger.warning("Webhook 400 Invalid JSON: %s. Payload: %s", e, raw)
         return aiohttp.web.json_response(
             {"error": "Invalid JSON"},
             status=400,
@@ -140,12 +142,14 @@ async def handle_discord_webhook(request: aiohttp.web.Request) -> aiohttp.web.Re
 
     parsed = _parse_payload(data)
     if not parsed:
+        logger.warning("Webhook 400 Invalid payload: missing or invalid fields. Payload: %s", data)
         return aiohttp.web.json_response(
             {"error": "Invalid payload: missing or invalid fields"},
             status=400,
         )
 
     if parsed["app_id"] != WEBHOOK_APP_ID_ALLOWED:
+        logger.warning("Webhook 400 app_id not allowed. Payload: %s", parsed)
         return aiohttp.web.json_response(
             {"error": "app_id not allowed"},
             status=400,
