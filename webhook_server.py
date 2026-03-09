@@ -6,7 +6,7 @@ from typing import Any
 
 import aiohttp.web
 
-from config import WEBHOOK_APP_ID_ALLOWED, WEBHOOK_SUBTITLE_CHANNEL_2
+from config import WEBHOOK_APP_ID_ALLOWED, WEBHOOK_SUBTITLE_CHANNEL_2, WEBHOOK_REQUIRED_SENDER
 
 logger = logging.getLogger(__name__)
 
@@ -148,12 +148,27 @@ async def handle_discord_webhook(request: aiohttp.web.Request) -> aiohttp.web.Re
             status=400,
         )
 
-    if parsed["app_id"].lower() != WEBHOOK_APP_ID_ALLOWED.lower():
-        logger.warning("Webhook 400 app_id not allowed. Payload: %s", parsed)
+    allowed_ids = [
+        aid.strip().lower()
+        for aid in (WEBHOOK_APP_ID_ALLOWED or "").split(",")
+        if aid.strip()
+    ]
+    received = (parsed["app_id"] or "").strip().lower()
+    if allowed_ids and received not in allowed_ids:
+        logger.warning(
+            "Webhook 400 app_id not allowed. Received: %r, expected: %r. Payload: %s",
+            parsed["app_id"],
+            WEBHOOK_APP_ID_ALLOWED,
+            parsed,
+        )
         return aiohttp.web.json_response(
             {"error": "app_id not allowed"},
             status=400,
         )
+
+    if WEBHOOK_REQUIRED_SENDER and WEBHOOK_REQUIRED_SENDER.lower() not in parsed["body"].lower():
+        logger.debug("Webhook skipped: body does not contain required sender %s", WEBHOOK_REQUIRED_SENDER)
+        return aiohttp.web.Response(status=200)
 
     logger.info("Webhook payload received: %s", parsed)
 

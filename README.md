@@ -76,7 +76,7 @@ Set `USE_WEBHOOK=true` to disable Discord API scraping and receive trading data 
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `app_id` | string | App identifier (e.g. `com.hnc.Discord`). Only matching `WEBHOOK_APP_ID_ALLOWED` is accepted. |
+| `app_id` | string | App identifier (e.g. `com.hnc.Discord`). Must match one of the comma-separated values in `WEBHOOK_APP_ID_ALLOWED` (case-insensitive). |
 | `title` | string | Notification title (e.g. server name). |
 | `subtitle` | string | Notification subtitle (e.g. `#channel`). Used to route to channel 2 when listed in `WEBHOOK_SUBTITLE_CHANNEL_2`. |
 | `body` | string | Message body (parseable trading text). |
@@ -90,6 +90,7 @@ Example payload formats:
 - **subtitle**: Used for channel routing; add e.g. `#🚨︱pro-alerts` to `WEBHOOK_SUBTITLE_CHANNEL_2` to route Twinsight alerts to channel 2.
 
 - `WEBHOOK_PORT`: Port for the webhook server (default 8080).
+- `WEBHOOK_REQUIRED_SENDER`: Only process messages whose body contains this string (e.g. `@AlertTC`). Set empty to accept all. Default: `@AlertTC`.
 - `WEBHOOK_SUBTITLE_CHANNEL_2`: Comma-separated subtitles that route to channel 2; others use channel 1.
 
 ## Features
