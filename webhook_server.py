@@ -168,8 +168,6 @@ async def handle_discord_webhook(request: aiohttp.web.Request) -> aiohttp.web.Re
             status=400,
         )
 
-    logger.info("Webhook accepted for processing: %s", parsed)
-
     bot: "TradingBot" = request.app["bot"]
     tracker: WebhookProcessedTracker = request.app["webhook_tracker"]
 
@@ -179,8 +177,10 @@ async def handle_discord_webhook(request: aiohttp.web.Request) -> aiohttp.web.Re
         parsed["delivered_date_iso"],
     )
     channel = _channel_for_subtitle(parsed["subtitle"])
+    logger.info("Webhook accepted: id=%s channel=%s body=%r", synthetic_id, channel, parsed["body"][:100])
 
     if tracker.is_processed(synthetic_id, channel):
+        logger.info("Webhook duplicate skipped: id=%s channel=%s", synthetic_id, channel)
         return aiohttp.web.Response(status=200)
 
     msg = WebhookMessage(
@@ -190,11 +190,14 @@ async def handle_discord_webhook(request: aiohttp.web.Request) -> aiohttp.web.Re
     )
 
     if channel == CHANNEL_2 and getattr(bot, "scraper_2", None) is not None:
+        logger.info("Webhook processing channel 2: id=%s", synthetic_id)
         await bot.process_message_2(msg)
     else:
+        logger.info("Webhook processing channel 1: id=%s", synthetic_id)
         await bot.process_message(msg)
 
     tracker.mark_processed(synthetic_id, channel)
+    logger.info("Webhook processed: id=%s channel=%s", synthetic_id, channel)
     return aiohttp.web.Response(status=200)
 
 
