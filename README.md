@@ -90,7 +90,6 @@ Example payload formats:
 - **subtitle**: Used for channel routing; add e.g. `#🚨︱pro-alerts` to `WEBHOOK_SUBTITLE_CHANNEL_2` to route Twinsight alerts to channel 2.
 
 - `WEBHOOK_PORT`: Port for the webhook server (default 8080).
-- `WEBHOOK_REQUIRED_SENDER`: Only process messages whose body contains this string (e.g. `@AlertTC`). Set empty to accept all. Default: `@AlertTC`.
 - `WEBHOOK_SUBTITLE_CHANNEL_2`: Comma-separated subtitles that route to channel 2; others use channel 1.
 
 ## Features

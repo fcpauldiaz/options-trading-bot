@@ -6,7 +6,7 @@ from typing import Any
 
 import aiohttp.web
 
-from config import WEBHOOK_APP_ID_ALLOWED, WEBHOOK_SUBTITLE_CHANNEL_2, WEBHOOK_REQUIRED_SENDER
+from config import WEBHOOK_APP_ID_ALLOWED, WEBHOOK_SUBTITLE_CHANNEL_2
 
 logger = logging.getLogger(__name__)
 
@@ -129,10 +129,11 @@ def _channel_for_subtitle(subtitle: str) -> int:
 
 
 async def handle_discord_webhook(request: aiohttp.web.Request) -> aiohttp.web.Response:
+    logger.info("Webhook POST /webhook/discord received")
     try:
         body = await request.read()
         data = json.loads(body) if body else {}
-        logger.info("Webhook received: %s", data)
+        logger.info("Webhook payload: %s", data)
     except (json.JSONDecodeError, ValueError) as e:
         raw = body.decode("utf-8", errors="replace")[:500] if body else ""
         logger.warning("Webhook 400 Invalid JSON: %s. Payload: %s", e, raw)
