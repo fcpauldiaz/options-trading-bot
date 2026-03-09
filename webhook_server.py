@@ -148,7 +148,7 @@ async def handle_discord_webhook(request: aiohttp.web.Request) -> aiohttp.web.Re
             status=400,
         )
 
-    if parsed["app_id"] != WEBHOOK_APP_ID_ALLOWED:
+    if parsed["app_id"].lower() != WEBHOOK_APP_ID_ALLOWED.lower():
         logger.warning("Webhook 400 app_id not allowed. Payload: %s", parsed)
         return aiohttp.web.json_response(
             {"error": "app_id not allowed"},
