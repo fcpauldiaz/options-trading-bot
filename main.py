@@ -33,16 +33,19 @@ from webhook_server import WebhookProcessedTracker, create_app
 
 os.makedirs('logs', exist_ok=True)
 
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(line_buffering=True)
+
 log_level_str = os.getenv("LOG_LEVEL", "INFO").upper()
 log_level = getattr(logging, log_level_str, logging.INFO)
 
 logging.basicConfig(
     level=log_level,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[
-        logging.FileHandler('logs/trading_bot.log'),
-        logging.StreamHandler(sys.stdout)
-    ]
+        logging.FileHandler("logs/trading_bot.log"),
+        logging.StreamHandler(sys.stdout),
+    ],
 )
 
 logger = logging.getLogger(__name__)
@@ -78,6 +81,14 @@ class TradingBot:
             self.order_executor_2 = None
 
         self.webhook_tracker = WebhookProcessedTracker() if USE_WEBHOOK else None
+
+    def _set_process_result(self, message, outcome: str, reason: str | None = None, **extra) -> None:
+        r = getattr(message, "result", None)
+        if r is not None and isinstance(r, dict):
+            r["outcome"] = outcome
+            if reason is not None:
+                r["reason"] = reason
+            r.update(extra)
 
     def _mark_message_processed(self, message, channel: int = 1) -> None:
         if getattr(message, "is_webhook", False) and self.webhook_tracker:
@@ -136,9 +147,10 @@ class TradingBot:
             
             if "SWING" in content.upper():
                 logger.info(f"Skipping SWING trade message {message.id}")
+                self._set_process_result(message, "skipped", "SWING trade")
                 self._mark_message_processed(message, 1)
                 return
-            
+
             if message.is_spacemonkey():
                 embed_titles = message.get_embed_titles()
                 await self._process_spacemonkey_message(message, content, embed_titles)
@@ -146,7 +158,7 @@ class TradingBot:
             
             trade_data = self.parser.parse(content)
             if not trade_data.get("valid"):
-                #logger.warning(f"Message {message.id} did not match trading format: {content}")
+                self._set_process_result(message, "skipped", "Message did not match trading format")
                 return
             
             if trade_data.get("all_out"):
@@ -160,8 +172,9 @@ class TradingBot:
                     logger.info(f"ALL OUT detected: Using current position of {position} contracts")
                 else:
                     logger.warning(f"ALL OUT detected but no open position for {trade_data['ticker']} {trade_data['strike']}{trade_data['option_type']}")
+                    self._set_process_result(message, "skipped", "ALL OUT but no open position")
                     return
-            
+
             if trade_data.get("use_fraction"):
                 position = self.position_tracker.get_position(
                     trade_data["ticker"],
@@ -180,8 +193,9 @@ class TradingBot:
                         logger.info(f"Fraction detected ({numerator}/{denominator}): Position {position}, selling {sold_quantity} contracts")
                 else:
                     logger.warning(f"Fraction detected but no open position for {trade_data['ticker']} {trade_data['strike']}{trade_data['option_type']}")
+                    self._set_process_result(message, "skipped", "Fraction but no open position")
                     return
-            
+
             logger.info(f"Parsed trade: {trade_data['action']} {trade_data['contracts']} {trade_data['ticker']} {trade_data['strike']}{trade_data['option_type']}")
             
             if trade_data["action"] == "BOUGHT":
@@ -201,21 +215,24 @@ class TradingBot:
                 
                 if not option_data:
                     logger.error(f"Could not get option price data for {trade_data['ticker']} {trade_data['strike']}{trade_data['option_type']}")
+                    self._set_process_result(message, "skipped", "Could not get option price data")
                     return
-                
+
                 option_symbol = option_data.get("symbol")
                 if not option_symbol:
                     logger.error(f"Could not extract option symbol from price data for {trade_data['ticker']} {trade_data['strike']}{trade_data['option_type']}")
+                    self._set_process_result(message, "skipped", "Could not extract option symbol")
                     return
-                
+
                 chain_price = self._calculate_chain_price(option_data)
                 if chain_price is None:
                     bid = option_data.get("bid", 0) or 0
                     ask = option_data.get("ask", 0) or 0
                     last_price = option_data.get("last")
                     logger.warning(f"Could not determine chain price for {trade_data['ticker']} {trade_data['strike']}{trade_data['option_type']} - bid: {bid}, ask: {ask}, last: {last_price}")
+                    self._set_process_result(message, "skipped", "Could not determine chain price")
                     return
-                
+
                 price_diff = abs(message_price - chain_price)
                 if price_diff > 0.05:
                     if trade_data["action"] == "BOUGHT" and chain_price < message_price:
@@ -244,6 +261,7 @@ class TradingBot:
                                         f"Price validation failed after retry: Message price ${message_price:.2f} differs from chain price ${retry_chain_price:.2f} "
                                         f"by ${retry_price_diff:.2f} (max allowed: $0.05). Order rejected."
                                     )
+                                    self._set_process_result(message, "skipped", "Price validation failed after retry")
                                     return
                                 else:
                                     logger.info(f"Price validation passed after retry: Message price ${message_price:.2f} vs chain price ${retry_chain_price:.2f} (diff: ${retry_price_diff:.2f})")
@@ -254,11 +272,13 @@ class TradingBot:
                                 logger.warning(
                                     f"Price validation failed: Could not determine chain price after retry. Order rejected."
                                 )
+                                self._set_process_result(message, "skipped", "Could not determine chain price after retry")
                                 return
                         else:
                             logger.warning(
                                 f"Price validation failed: Could not get option price data after retry. Order rejected."
                             )
+                            self._set_process_result(message, "skipped", "Could not get option data after retry")
                             return
                 else:
                     logger.info(f"Price validation passed: Message price ${message_price:.2f} vs chain price ${chain_price:.2f} (diff: ${price_diff:.2f})")
@@ -271,8 +291,9 @@ class TradingBot:
                 
                 if not option_symbol:
                     logger.error(f"Could not resolve option symbol for {trade_data['ticker']} {trade_data['strike']}{trade_data['option_type']}")
+                    self._set_process_result(message, "skipped", "Could not resolve option symbol")
                     return
-                
+
                 if trade_data["action"] == "SOLD" and "price" not in trade_data:
                     logger.info(f"Fetching price for SOLD trade: {trade_data['ticker']} {trade_data['strike']}{trade_data['option_type']}")
                     option_data = self.option_resolver.get_option_price(
@@ -320,11 +341,20 @@ class TradingBot:
                     price
                 )
                 self._mark_message_processed(message, 1)
+                self._set_process_result(
+                    message, "order_placed",
+                    reason="Order executed successfully",
+                    order_result=order_result,
+                    trade_data={k: v for k, v in trade_data_for_log.items() if k != "valid"},
+                )
             else:
-                logger.error(f"Order failed: {order_result.get('error', 'Unknown error')}")
-                
+                error_msg = order_result.get("error", "Unknown error")
+                logger.error(f"Order failed: {error_msg}")
+                self._set_process_result(message, "order_failed", reason=error_msg, order_result=order_result)
+
         except Exception as e:
             logger.error(f"Error processing message {message.id}: {e}", exc_info=True)
+            self._set_process_result(message, "error", reason=str(e))
 
     async def _process_spacemonkey_message(self, message, content, embed_titles=None):
         try:
@@ -616,10 +646,11 @@ class TradingBot:
             
             if "SWING" in content.upper():
                 logger.info(f"Skipping SWING trade message {message.id}")
+                self._set_process_result(message, "skipped", "SWING trade")
                 if self.scraper_2:
                     self._mark_message_processed(message, 2)
                 return
-            
+
             if not self.parser_2:
                 logger.error("Parser 2 not initialized")
                 return
@@ -628,9 +659,9 @@ class TradingBot:
             
             trade_data = self.parser_2.parse(content)
             if not trade_data.get("valid"):
-                #logger.warning(f"Message {message.id} did not match trading format: {content}")
+                self._set_process_result(message, "skipped", "Message did not match trading format")
                 return
-            
+
             if trade_data.get("error"):
                 error_msg = trade_data.get('error', 'Unknown parsing error')
                 logger.warning(f"Message {message.id} parsing error: {error_msg}")
@@ -644,10 +675,11 @@ class TradingBot:
                     )
                 except Exception as e:
                     logger.error(f"Failed to send failure notification: {e}", exc_info=True)
+                self._set_process_result(message, "skipped", reason=error_msg)
                 if self.scraper_2:
                     self._mark_message_processed(message, 2)
                 return
-            
+
             action = trade_data["action"]
             option_symbol = None
             
@@ -1018,6 +1050,7 @@ class TradingBot:
             else:
                 error_msg = f"Unknown action: {action}"
                 logger.warning(error_msg)
+                self._set_process_result(message, "skipped", reason=error_msg)
                 try:
                     send_scraper2_failure_notification(
                         message.id,
@@ -1031,7 +1064,7 @@ class TradingBot:
                 if self.scraper_2:
                     self._mark_message_processed(message, 2)
                 return
-            
+
             if not option_symbol:
                 error_msg = f"Option symbol not resolved for {trade_data.get('ticker', 'unknown')} {trade_data.get('strike', 'unknown')}{trade_data.get('option_type', 'unknown')}"
                 logger.error(error_msg)
@@ -1045,10 +1078,11 @@ class TradingBot:
                     )
                 except Exception as e:
                     logger.error(f"Failed to send failure notification: {e}", exc_info=True)
+                self._set_process_result(message, "skipped", reason=error_msg)
                 if self.scraper_2:
                     self._mark_message_processed(message, 2)
                 return
-            
+
             order_result = self.order_executor_2.execute_order(trade_data, option_symbol)
             
             if order_result.get("success"):
@@ -1076,9 +1110,16 @@ class TradingBot:
                 
                 if self.scraper_2:
                     self._mark_message_processed(message, 2)
+                self._set_process_result(
+                    message, "order_placed",
+                    reason="Order executed successfully",
+                    order_result=order_result,
+                    trade_data={k: v for k, v in trade_data_for_log.items() if k != "valid"},
+                )
             else:
                 error_msg = order_result.get('error', 'Unknown error')
                 logger.error(f"Order failed: {error_msg}")
+                self._set_process_result(message, "order_failed", reason=error_msg, order_result=order_result)
                 try:
                     send_scraper2_failure_notification(
                         message.id,
@@ -1091,9 +1132,10 @@ class TradingBot:
                     logger.error(f"Failed to send failure notification: {e}", exc_info=True)
                 if self.scraper_2:
                     self._mark_message_processed(message, 2)
-                
+
         except Exception as e:
             logger.error(f"Error processing message (scraper 2) {message.id}: {e}", exc_info=True)
+            self._set_process_result(message, "error", reason=str(e))
             try:
                 trading_mode_2 = self.tradier_client_2.get_trading_mode() if self.tradier_client_2 else "paper"
                 send_scraper2_failure_notification(

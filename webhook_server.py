@@ -2,6 +2,7 @@ import hashlib
 import json
 import logging
 import os
+from datetime import date, datetime
 from typing import Any
 
 import aiohttp.web
@@ -14,6 +15,18 @@ CHANNEL_1 = 1
 CHANNEL_2 = 2
 
 
+def _json_safe(obj: Any) -> Any:
+    if isinstance(obj, dict):
+        return {k: _json_safe(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_json_safe(v) for v in obj]
+    if isinstance(obj, (date, datetime)):
+        return obj.isoformat()
+    if hasattr(obj, "__dict__") and not isinstance(obj, type):
+        return str(obj)
+    return obj
+
+
 def _synthetic_id(body: str, delivered_date: int | None, delivered_date_iso: str) -> int:
     raw = f"{body}|{delivered_date or ''}|{delivered_date_iso or ''}"
     h = hashlib.sha256(raw.encode()).hexdigest()
@@ -21,7 +34,7 @@ def _synthetic_id(body: str, delivered_date: int | None, delivered_date_iso: str
 
 
 class WebhookMessage:
-    __slots__ = ("id", "content", "embeds", "timestamp", "is_webhook", "channel")
+    __slots__ = ("id", "content", "embeds", "timestamp", "is_webhook", "channel", "result")
 
     def __init__(
         self,
@@ -35,6 +48,7 @@ class WebhookMessage:
         self.timestamp = None
         self.is_webhook = True
         self.channel = channel
+        self.result: dict[str, Any] = {}
 
     def is_spacemonkey(self) -> bool:
         return False
@@ -138,7 +152,7 @@ async def handle_discord_webhook(request: aiohttp.web.Request) -> aiohttp.web.Re
         raw = body.decode("utf-8", errors="replace")[:500] if body else ""
         logger.warning("Webhook 400 Invalid JSON: %s. Payload: %s", e, raw)
         return aiohttp.web.json_response(
-            {"error": "Invalid JSON"},
+            {"status": "rejected", "reason": "invalid_json", "error": "Invalid JSON"},
             status=400,
         )
 
@@ -146,7 +160,7 @@ async def handle_discord_webhook(request: aiohttp.web.Request) -> aiohttp.web.Re
     if not parsed:
         logger.warning("Webhook 400 Invalid payload: missing or invalid fields. Payload: %s", data)
         return aiohttp.web.json_response(
-            {"error": "Invalid payload: missing or invalid fields"},
+            {"status": "rejected", "reason": "invalid_payload", "error": "Invalid payload: missing or invalid fields"},
             status=400,
         )
 
@@ -164,7 +178,7 @@ async def handle_discord_webhook(request: aiohttp.web.Request) -> aiohttp.web.Re
             parsed,
         )
         return aiohttp.web.json_response(
-            {"error": "app_id not allowed"},
+            {"status": "rejected", "reason": "app_id_not_allowed", "error": "app_id not allowed"},
             status=400,
         )
 
@@ -181,7 +195,12 @@ async def handle_discord_webhook(request: aiohttp.web.Request) -> aiohttp.web.Re
 
     if tracker.is_processed(synthetic_id, channel):
         logger.info("Webhook duplicate skipped: id=%s channel=%s", synthetic_id, channel)
-        return aiohttp.web.Response(status=200)
+        return aiohttp.web.json_response({
+            "status": "duplicate_skipped",
+            "id": synthetic_id,
+            "channel": channel,
+            "reason": "Message already processed",
+        })
 
     msg = WebhookMessage(
         message_id=synthetic_id,
@@ -198,7 +217,14 @@ async def handle_discord_webhook(request: aiohttp.web.Request) -> aiohttp.web.Re
 
     tracker.mark_processed(synthetic_id, channel)
     logger.info("Webhook processed: id=%s channel=%s", synthetic_id, channel)
-    return aiohttp.web.Response(status=200)
+    raw_result = getattr(msg, "result", None) or {}
+    response = {
+        "status": "processed",
+        "id": synthetic_id,
+        "channel": channel,
+        "processing": _json_safe(raw_result),
+    }
+    return aiohttp.web.json_response(response)
 
 
 def create_app(bot: "TradingBot", webhook_tracker: WebhookProcessedTracker) -> aiohttp.web.Application:
