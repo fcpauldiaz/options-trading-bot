@@ -1,0 +1,2 @@
+[variables]
+PYTHONUNBUFFERED = "1"

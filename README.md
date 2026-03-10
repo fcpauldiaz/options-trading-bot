@@ -103,4 +103,4 @@ Example payload formats:
 
 ### Logging on the server
 
-Logs are written to `logs/trading_bot.log` and to stdout. If nothing appears on the server console (e.g. when using Docker, systemd, or nohup), stdout may be buffered. The app enables line buffering when possible; you can also set `PYTHONUNBUFFERED=1` in the environment so Python flushes stdout immediately. With Docker: `environment: - PYTHONUNBUFFERED=1`. Check `LOG_LEVEL` (default `INFO`) if you expect more or fewer messages.
+Logs are written to `logs/trading_bot.log` and to **stderr** (so Nixpacks, Railway, Docker, etc. show them in deploy/runtime logs). The app uses line buffering when possible. For Nixpacks, `nixpacks.toml` sets `PYTHONUNBUFFERED=1`. If logs still don’t appear, set `PYTHONUNBUFFERED=1` in your platform’s environment. Use `LOG_LEVEL` (default `INFO`) to control verbosity.

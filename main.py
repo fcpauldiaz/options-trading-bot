@@ -33,23 +33,40 @@ from webhook_server import WebhookProcessedTracker, create_app
 
 os.makedirs('logs', exist_ok=True)
 
-if hasattr(sys.stdout, "reconfigure"):
-    sys.stdout.reconfigure(line_buffering=True)
+for stream in (sys.stdout, sys.stderr):
+    if hasattr(stream, "reconfigure"):
+        stream.reconfigure(line_buffering=True)
 
 log_level_str = os.getenv("LOG_LEVEL", "INFO").upper()
 log_level = getattr(logging, log_level_str, logging.INFO)
+log_fmt = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 
-logging.basicConfig(
-    level=log_level,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[
+basic_config_kw: dict = {
+    "level": log_level,
+    "format": log_fmt,
+    "handlers": [
         logging.FileHandler("logs/trading_bot.log"),
-        logging.StreamHandler(sys.stdout),
+        logging.StreamHandler(sys.stderr),
     ],
+}
+if sys.version_info >= (3, 8):
+    basic_config_kw["force"] = True
+logging.basicConfig(**basic_config_kw)
+
+root = logging.getLogger()
+root.setLevel(log_level)
+has_console = any(
+    getattr(h, "stream", None) is sys.stderr
+    for h in root.handlers
+    if isinstance(h, logging.StreamHandler)
 )
+if not has_console:
+    console = logging.StreamHandler(sys.stderr)
+    console.setFormatter(logging.Formatter(log_fmt))
+    root.addHandler(console)
 
 logger = logging.getLogger(__name__)
-logger.info(f"Logging level set to: {log_level_str} (numeric: {log_level})")
+logger.info("Logging level set to: %s (numeric: %s)", log_level_str, log_level)
 
 class DebugMessage:
     def __init__(self, content):
