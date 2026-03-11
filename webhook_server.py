@@ -136,7 +136,12 @@ def _parse_payload(data: dict[str, Any]) -> dict[str, Any] | None:
     }
 
 
-def _channel_for_subtitle(subtitle: str) -> int:
+CHANNEL_2_BODY_MARKER = "@AlertTC"
+
+
+def _channel_for_payload(body: str, subtitle: str) -> int:
+    if CHANNEL_2_BODY_MARKER.lower() in (body or "").lower():
+        return CHANNEL_2
     allowed = WEBHOOK_SUBTITLE_CHANNEL_2 or ""
     parts = [p.strip() for p in allowed.split(",") if p.strip()]
     return CHANNEL_2 if subtitle.strip() in parts else CHANNEL_1
@@ -190,7 +195,7 @@ async def handle_discord_webhook(request: aiohttp.web.Request) -> aiohttp.web.Re
         parsed["delivered_date"],
         parsed["delivered_date_iso"],
     )
-    channel = _channel_for_subtitle(parsed["subtitle"])
+    channel = _channel_for_payload(parsed["body"], parsed["subtitle"])
     logger.info("Webhook accepted: id=%s channel=%s body=%r", synthetic_id, channel, parsed["body"][:100])
 
     if tracker.is_processed(synthetic_id, channel):
